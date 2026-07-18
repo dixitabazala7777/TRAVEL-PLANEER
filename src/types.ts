@@ -68,3 +68,15 @@ export interface DayPlan {
 }
 
 export type BudgetTier = 'budget' | 'moderate' | 'luxury';
+
+export interface WeatherAlert {
+  type: string;
+  severity: 'Low' | 'Moderate' | 'High' | 'Critical';
+  description: string;
+  advice: string;
+}
+
+export interface WeatherAlertResponse {
+  alerts: WeatherAlert[];
+  summary: string;
+}

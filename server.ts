@@ -123,6 +123,58 @@ Only return raw JSON.`;
   }
 });
 
+// API Route for Historical Weather Alerts using Google Search Grounding
+app.post("/api/weather-alerts", async (req, res) => {
+  try {
+    const { destination, month } = req.body;
+
+    if (!destination || month === undefined) {
+      return res.status(400).json({ error: "Missing destination or month" });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    }
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthName = monthNames[month];
+
+    const prompt = `Research historical extreme weather events and natural climate risks for ${destination} during the month of ${monthName}.
+Look for recurring patterns like hurricane seasons, monsoon peaks, extreme heatwave windows, severe wildfire risks, or unusual cold snaps that travelers should be aware of.
+Focus on AUTHENTIC historical data for this specific month.
+Return the result as a JSON object:
+{
+  "alerts": [
+    {
+      "type": "Extreme Heat | Monsoon | Hurricane Season | Wildfire Risk | Blizzard | Fog",
+      "severity": "Low | Moderate | High | Critical",
+      "description": "Short explanation of the risk and historical context",
+      "advice": "Actionable safety or packing tip"
+    }
+  ],
+  "summary": "One sentence overview of the climate safety profile for this month."
+}
+Only return raw JSON. If no major historical risks exist for this month, return an empty alerts array but include a summary.`;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} } as any],
+      }
+    });
+
+    const responseText = result.text;
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+
+    res.json(data);
+  } catch (error: any) {
+    console.error("Weather alerts error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

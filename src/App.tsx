@@ -67,6 +67,7 @@ import { VatRefundCalculator } from './components/VatRefundCalculator';
 import { LiveLingualSuite } from './components/LiveLingualSuite';
 import { HardwareAuditCenter } from './components/HardwareAuditCenter';
 import { BudgetCalculatorAndSuggestions } from './components/BudgetCalculatorAndSuggestions';
+import { WeatherAlerts } from './components/WeatherAlerts';
 import {
   DESTINATIONS,
   STYLES,
@@ -1431,6 +1432,14 @@ export default function App() {
                   </p>
                 </div>
               </div>
+            </section>
+
+            {/* Historical Weather Extreme Alerts Section */}
+            <section id="weather-extreme-alerts" className="mb-8">
+              <WeatherAlerts 
+                destinationName={destination.name} 
+                travelMonth={travelMonth} 
+              />
             </section>
 
             {/* Export and Actions Bar */}
