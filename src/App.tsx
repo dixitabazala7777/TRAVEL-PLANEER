@@ -54,8 +54,7 @@ import {
   HeartHandshake,
   Leaf,
   HelpCircle,
-  Heart,
-  Plane
+  Heart
 } from 'lucide-react';
 
 import { Destination, DayPlan, Activity, PackingItem, BudgetTier } from './types';
@@ -66,9 +65,6 @@ import { PackingWeightChart } from './components/PackingWeightChart';
 import { VatRefundCalculator } from './components/VatRefundCalculator';
 import { LiveLingualSuite } from './components/LiveLingualSuite';
 import { HardwareAuditCenter } from './components/HardwareAuditCenter';
-import { ActivityStopwatch } from './components/ActivityStopwatch';
-import { FlightTracker } from './components/FlightTracker';
-import { BudgetCalculatorAndSuggestions } from './components/BudgetCalculatorAndSuggestions';
 import {
   DESTINATIONS,
   STYLES,
@@ -79,24 +75,6 @@ import {
 } from './data';
 import { seededRandom, hashStr, fmtUSD, playChime } from './utils';
 import { generateDossierData, generateDossierTextString, getChaosBuffer } from './dossierGenerator';
-
-import placeholderAdventure from './assets/images/placeholder_adventure_1784364434719.jpg';
-import placeholderCulture from './assets/images/placeholder_culture_1784364443854.jpg';
-import placeholderRelaxation from './assets/images/placeholder_relaxation_1784364455288.jpg';
-import placeholderFoodie from './assets/images/placeholder_foodie_1784364465413.jpg';
-import placeholderFamily from './assets/images/placeholder_family_1784364478174.jpg';
-
-const CATEGORY_IMAGES: Record<string, string> = {
-  Adventure: placeholderAdventure,
-  Culture: placeholderCulture,
-  Relaxation: placeholderRelaxation,
-  Foodie: placeholderFoodie,
-  Family: placeholderFamily,
-};
-
-const getCategoryImage = (cat: string) => {
-  return CATEGORY_IMAGES[cat] || placeholderAdventure;
-};
 
 const TIER_BASE = { budget: 55, moderate: 130, luxury: 320 };
 const TIER_SPLIT = {
@@ -155,7 +133,7 @@ export default function App() {
     } catch { return []; }
   });
   const [packingInput, setPackingInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'packing' | 'insights' | 'dossier' | 'flights'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'packing' | 'insights' | 'dossier'>('itinerary');
 
   // --- 15 Hackathon Features States ---
   const [homeTimezone, setHomeTimezone] = useState<number>(() => {
@@ -786,35 +764,6 @@ export default function App() {
     });
   };
 
-  const handleQuickSwap = (
-    dayIdx: number,
-    slot: 'Morning' | 'Afternoon' | 'Evening',
-    actId: string,
-    targetTpl: any,
-    targetStyle: string
-  ) => {
-    if (!destination) return;
-    const dest = destination;
-    playChime('click');
-
-    setItinerary(prev => {
-      return prev.map((dayPlan, idx) => {
-        if (idx !== dayIdx) return dayPlan;
-
-        const updatedSlots = { ...dayPlan.slots };
-        updatedSlots[slot] = updatedSlots[slot].map(act => {
-          if (act.id !== actId) return act;
-          return makeActivity(targetTpl, targetStyle, dest, dayPlan.day, slot);
-        });
-
-        return {
-          ...dayPlan,
-          slots: updatedSlots
-        };
-      });
-    });
-  };
-
   // --- Check activity off ---
   const handleToggleActivity = (dayIdx: number, slot: 'Morning' | 'Afternoon' | 'Evening', actId: string) => {
     setItinerary(prev => {
@@ -824,21 +773,6 @@ export default function App() {
         updatedSlots[slot] = updatedSlots[slot].map(act => {
           if (act.id !== actId) return act;
           return { ...act, done: !act.done };
-        });
-        return { ...dayPlan, slots: updatedSlots };
-      });
-    });
-  };
-
-  // --- Update activity notes ---
-  const handleUpdateActivityNotes = (dayIdx: number, slot: 'Morning' | 'Afternoon' | 'Evening', actId: string, notes: string) => {
-    setItinerary(prev => {
-      return prev.map((dayPlan, idx) => {
-        if (idx !== dayIdx) return dayPlan;
-        const updatedSlots = { ...dayPlan.slots };
-        updatedSlots[slot] = updatedSlots[slot].map(act => {
-          if (act.id !== actId) return act;
-          return { ...act, notes };
         });
         return { ...dayPlan, slots: updatedSlots };
       });
@@ -1450,8 +1384,7 @@ export default function App() {
                 { id: 'budget', label: 'Budget & Splits', icon: <PieChart className="w-3.5 h-3.5" /> },
                 { id: 'packing', label: 'Packing list', icon: <Backpack className="w-3.5 h-3.5" /> },
                 { id: 'insights', label: 'Local Insights', icon: <Globe className="w-3.5 h-3.5" /> },
-                { id: 'dossier', label: 'Adaptive AI Dossier', icon: <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" /> },
-                { id: 'flights', label: 'Flight Tracker', icon: <Plane className="w-3.5 h-3.5 text-blue-400 shrink-0" /> }
+                { id: 'dossier', label: 'Adaptive AI Dossier', icon: <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" /> }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1567,43 +1500,17 @@ export default function App() {
                                     else if (act.cat === 'Foodie') catColors = 'text-rose-400 border-rose-400/30 bg-rose-400/10';
                                     else if (act.cat === 'Family') catColors = 'text-violet-400 border-violet-400/30 bg-violet-400/10';
 
-                                    // Calculate suggested alternative
-                                    const pool = ACTIVITY_POOL[act.style]?.filter(t => t.slot === slot) || [];
-                                    const candidates = pool.filter(t => t.t.replace('{name}', destination?.name || '') !== act.title);
-                                    
-                                    // Find a stable alternative
-                                    let alternativeTpl = candidates[0];
-                                    let alternativeStyle = act.style;
-                                    
-                                    // If no direct style match candidate, fallback to other styles in the same slot
-                                    if (!alternativeTpl) {
-                                      const otherStyles = Object.keys(ACTIVITY_POOL).filter(s => s !== act.style);
-                                      for (const s of otherStyles) {
-                                        const poolOtherStyle = ACTIVITY_POOL[s]?.filter(t => t.slot === slot) || [];
-                                        const candidatesOtherStyle = poolOtherStyle.filter(t => t.t.replace('{name}', destination?.name || '') !== act.title);
-                                        if (candidatesOtherStyle.length > 0) {
-                                          alternativeTpl = candidatesOtherStyle[0];
-                                          alternativeStyle = s;
-                                          break;
-                                        }
-                                      }
-                                    }
-                                    
-                                    const alternativeTitle = alternativeTpl 
-                                      ? alternativeTpl.t.replace('{name}', destination?.name || '') 
-                                      : null;
-
                                     return (
                                       <div
                                         key={act.id}
-                                        className={`glass rounded-xl p-4 flex items-start gap-4 hover:border-white/20 transition-all ${
+                                        className={`glass rounded-xl p-4 flex items-start gap-3.5 hover:border-white/20 transition-all ${
                                           act.done ? 'opacity-40' : ''
                                         }`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleToggleActivity(activeDay, slot, act.id)}
-                                          className={`mt-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all outline-none ${
+                                          className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all outline-none ${
                                             act.done
                                               ? 'bg-blue-500 border-blue-500'
                                               : 'border-slate-500 hover:border-blue-400'
@@ -1612,127 +1519,59 @@ export default function App() {
                                           {act.done && <Check className="w-3 h-3 text-ink-950 stroke-[3]" />}
                                         </button>
 
-                                        <div className="flex-1 min-w-0 overflow-hidden">
-                                          <AnimatePresence mode="wait" initial={false}>
-                                            <motion.div
-                                              key={act.title}
-                                              initial={{ opacity: 0, y: 15 }}
-                                              animate={{ opacity: 1, y: 0 }}
-                                              exit={{ opacity: 0, y: -15 }}
-                                              transition={{ duration: 0.25, ease: 'easeInOut' }}
-                                              className="flex flex-col md:flex-row gap-4 justify-between items-stretch"
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <p className={`text-sm font-medium text-slate-100 leading-snug ${
+                                              act.done ? 'line-through text-slate-500' : ''
+                                            }`}>
+                                              {act.title}
+                                            </p>
+                                            {!act.done && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  playChime('click');
+                                                  setMapActivity(act);
+                                                }}
+                                                className="inline-flex items-center gap-1 mt-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium transition cursor-pointer outline-none"
+                                              >
+                                                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
+                                                <span>Show on Map</span>
+                                              </button>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleFavorite(act, itinerary[activeDay].day, slot)}
+                                              className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium transition cursor-pointer outline-none text-slate-400 hover:text-rose-400 group"
                                             >
-                                              <div className="flex-1 min-w-0 flex flex-col justify-between">
-                                                <div>
-                                                  <div className="flex items-start justify-between gap-3">
-                                                    <p className={`text-sm font-medium text-slate-100 leading-snug ${
-                                                      act.done ? 'line-through text-slate-500' : ''
-                                                    }`}>
-                                                      {act.title}
-                                                    </p>
-                                                    <span className="shrink-0 text-xs font-mono text-slate-400 font-semibold">
-                                                      {fmtUSD(act.cost)}
-                                                    </span>
-                                                  </div>
-                                                  
-                                                  <div className="flex flex-wrap items-center gap-3 mt-2.5">
-                                                    {!act.done && (
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          playChime('click');
-                                                          setMapActivity(act);
-                                                        }}
-                                                        className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium transition cursor-pointer outline-none"
-                                                      >
-                                                        <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                                        <span>Show on Map</span>
-                                                      </button>
-                                                    )}
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleToggleFavorite(act, itinerary[activeDay].day, slot)}
-                                                      className="inline-flex items-center gap-1 text-[11px] font-medium transition cursor-pointer outline-none text-slate-400 hover:text-rose-400 group/fav"
-                                                    >
-                                                      <Heart
-                                                        className={`w-3.5 h-3.5 transition-all ${
-                                                          favorites.some(f => f.activity.id === act.id)
-                                                            ? 'fill-rose-500 text-rose-500 scale-110'
-                                                            : 'text-slate-500 group-hover/fav:text-rose-400'
-                                                        }`}
-                                                      />
-                                                      <span className={favorites.some(f => f.activity.id === act.id) ? 'text-rose-400' : 'text-slate-400 group-hover/fav:text-rose-400'}>
-                                                        {favorites.some(f => f.activity.id === act.id) ? 'Saved' : 'Save'}
-                                                      </span>
-                                                    </button>
-                                                  </div>
-                                                </div>
-
-                                                {alternativeTitle && (
-                                                  <div className="mt-2.5 text-[10px] font-mono text-slate-400 bg-white/[0.02] border border-white/5 rounded-lg px-2.5 py-2 flex items-center justify-between gap-3 group/alt hover:border-blue-500/20 hover:bg-blue-500/[0.01] transition-all">
-                                                    <span className="truncate flex items-center gap-1.5 min-w-0">
-                                                      <Sparkles className="w-3 h-3 text-blue-400 shrink-0 animate-pulse" />
-                                                      <span className="text-slate-500 font-bold shrink-0">TRY:</span>
-                                                      <span className="text-slate-200 truncate font-sans font-medium">{alternativeTitle}</span>
-                                                    </span>
-                                                    <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider shrink-0 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                                                      SUGGESTION
-                                                    </span>
-                                                  </div>
-                                                )}
-
-                                                {/* Stopwatch Time Tracker */}
-                                                <ActivityStopwatch activityId={act.id} />
-
-                                                {/* Personal Notes / Reminders */}
-                                                <div className="mt-3.5 space-y-1">
-                                                  <label className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest block">Personal Notes & Reminders</label>
-                                                  <textarea
-                                                    rows={1}
-                                                    value={act.notes || ''}
-                                                    onChange={(e) => handleUpdateActivityNotes(activeDay, slot, act.id, e.target.value)}
-                                                    placeholder="Add custom tickets, exact times, booking links or reminders..."
-                                                    className="w-full bg-white/[0.02] border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 focus:border-blue-500/30 focus:bg-ink-950/40 transition-all outline-none resize-y min-h-[34px] max-h-[120px]"
-                                                  />
-                                                </div>
-
-                                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
-                                                  <span className={`text-[10px] font-mono uppercase tracking-wide border rounded-full px-2.5 py-0.5 ${catColors}`}>
-                                                    {act.cat}
-                                                  </span>
-                                                  {alternativeTpl && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleQuickSwap(activeDay, slot, act.id, alternativeTpl, alternativeStyle)}
-                                                      className="text-[11px] bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 text-blue-400 border border-blue-500/20 rounded px-2.5 py-1 flex items-center gap-1.5 transition ml-auto outline-none cursor-pointer group"
-                                                      title={`Quick Swap with: ${alternativeTitle}`}
-                                                    >
-                                                      <Sparkles className="w-3 h-3 text-blue-400 group-hover:rotate-12 transition-transform" />
-                                                      <span>Quick Swap</span>
-                                                    </button>
-                                                  )}
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleSwapActivity(activeDay, slot, act.id)}
-                                                    className="text-[11px] text-slate-500 hover:text-blue-400 flex items-center gap-1 transition outline-none"
-                                                  >
-                                                    <Shuffle className="w-3 h-3" /> Shuffle
-                                                  </button>
-                                                </div>
-                                              </div>
-
-                                              {/* AI-Generated Category Placeholder Image */}
-                                              <div className="w-full md:w-24 h-32 md:h-24 rounded-lg overflow-hidden shrink-0 border border-white/5 relative bg-ink-950 group/img shadow-md">
-                                                <img
-                                                  src={getCategoryImage(act.cat)}
-                                                  alt={act.cat}
-                                                  referrerPolicy="no-referrer"
-                                                  className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110"
-                                                />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-ink-950/55 via-transparent to-transparent pointer-events-none" />
-                                              </div>
-                                            </motion.div>
-                                          </AnimatePresence>
+                                              <Heart
+                                                className={`w-3.5 h-3.5 transition-all ${
+                                                  favorites.some(f => f.activity.id === act.id)
+                                                    ? 'fill-rose-500 text-rose-500 scale-110'
+                                                    : 'text-slate-500 group-hover:text-rose-400'
+                                                }`}
+                                              />
+                                              <span className={favorites.some(f => f.activity.id === act.id) ? 'text-rose-400' : 'text-slate-400 group-hover:text-rose-400'}>
+                                                {favorites.some(f => f.activity.id === act.id) ? 'Saved' : 'Save'}
+                                              </span>
+                                            </button>
+                                            <span className="shrink-0 text-xs font-mono text-slate-400 font-semibold">
+                                              {fmtUSD(act.cost)}
+                                            </span>
+                                          </div>
+                                          
+                                          <div className="flex items-center gap-2 mt-2">
+                                            <span className={`text-[10px] font-mono uppercase tracking-wide border rounded-full px-2.5 py-0.5 ${catColors}`}>
+                                              {act.cat}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSwapActivity(activeDay, slot, act.id)}
+                                              className="text-[11px] text-slate-500 hover:text-blue-400 flex items-center gap-1 transition ml-auto outline-none"
+                                            >
+                                              <Shuffle className="w-3 h-3" /> Swap
+                                            </button>
+                                          </div>
                                         </div>
                                       </div>
                                     );
@@ -3012,25 +2851,6 @@ export default function App() {
 
               </motion.section>
             )}
-
-            {/* ===== FLIGHT TRACKER TAB PANEL ===== */}
-            {activeTab === 'flights' && (
-              <motion.section
-                key="flights"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-6"
-              >
-                <FlightTracker 
-                  destinationName={destination?.name}
-                  destinationCountry={destination?.country}
-                  travelMonth={travelMonth}
-                  tripDurationDays={days}
-                />
-              </motion.section>
-            )}
           </AnimatePresence>
         </main>
         )}
@@ -3039,9 +2859,9 @@ export default function App() {
       {/* ============ FOOTER ============ */}
       <footer className="border-t border-white/5 py-8 mt-12 bg-ink-950/40">
         <div className="max-w-7xl mx-auto px-5 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 font-mono">
-          <span>Waypoint — Adaptive AI Trip Dossier & Search Grounded Flight Tracker.</span>
+          <span>Waypoint — client-side trip simulation, zero external calls.</span>
           <span className="flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5 text-slate-500" /> Secure backend proxy integrations
+            <Lock className="w-3.5 h-3.5 text-slate-500" /> No data leaves your browser
           </span>
         </div>
       </footer>
