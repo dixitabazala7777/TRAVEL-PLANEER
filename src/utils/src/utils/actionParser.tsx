@@ -56,10 +56,8 @@ export const parseChatActions = (
   return parts.length > 0 ? parts : rawText;
 };
 
-import { parseChatActions } from '../utils/actionParser';
-
 // Inside your rendering loop for chatbot messages:
-const ChatMessageBubble = ({ message, openActivityMapModal }) => {
+const ChatMessageBubble = ({ message, openActivityMapModal }: { message: { text: string }; openActivityMapModal: (data: { name: string; coordinates: string }) => void }) => {
   return (
     <div className="p-3 my-2 rounded-xl bg-slate-900/60 border border-slate-800 backdrop-blur-md text-slate-200 text-sm whitespace-pre-line leading-relaxed">
       {parseChatActions(message.text, (name, lat, lng) => {

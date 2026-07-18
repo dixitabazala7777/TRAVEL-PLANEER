@@ -61,6 +61,7 @@ import { Destination, DayPlan, Activity, PackingItem, BudgetTier } from './types
 import { CurrencyConverter } from './components/CurrencyConverter';
 import { WeatherTrendChart } from './components/WeatherTrendChart';
 import { ActivityMapModal } from './components/ActivityMapModal';
+import { PackingWeightChart } from './components/PackingWeightChart';
 import {
   DESTINATIONS,
   STYLES,
@@ -2163,6 +2164,8 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                <PackingWeightChart packing={packing} baggageWeights={baggageWeights} />
 
                 <div className="glass rounded-2xl p-5 md:p-6 space-y-6 border border-white/5">
                   {/* Input form */}
