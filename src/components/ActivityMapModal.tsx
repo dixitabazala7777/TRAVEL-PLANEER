@@ -15,7 +15,9 @@ import {
   Coffee,
   Shield,
   Heart,
-  Store
+  Store,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { playChime, hashStr, seededRandom } from '../utils';
 import { Activity } from '../types';
@@ -105,7 +107,7 @@ const getServiceColor = (type: 'atm' | 'pharmacy' | 'cafe' | 'store' | 'landmark
   }
 };
 
-const generateNearbyServices = (activityTitle: string, destinationName: string, actX: number, actY: number): NearbyService[] => {
+const generateNearbyServices = (activityTitle: string, destinationName: string, actX: number, actY: number, radiusKm: number): NearbyService[] => {
   const hash = hashStr(activityTitle + destinationName + "nearby");
   const rng = seededRandom(hash);
   
@@ -130,7 +132,7 @@ const generateNearbyServices = (activityTitle: string, destinationName: string, 
     // Position relative to active waypoint (actX, actY)
     // Keep them inside the map bounds (20 to 380 for x, 20 to 280 for y)
     const angle = itemRng() * Math.PI * 2;
-    const distancePixels = 25 + itemRng() * 35; // 25 to 60 pixels radius (approx 1km)
+    const distancePixels = (25 + itemRng() * 35) * radiusKm; // 25 to 60 pixels radius scaled
     
     let x = actX + Math.cos(angle) * distancePixels;
     let y = actY + Math.sin(angle) * distancePixels;
@@ -139,7 +141,7 @@ const generateNearbyServices = (activityTitle: string, destinationName: string, 
     x = Math.max(20, Math.min(380, x));
     y = Math.max(20, Math.min(280, y));
 
-    const distanceMeters = Math.round(150 + itemRng() * 750); // 150m to 900m
+    const distanceMeters = Math.round((150 + itemRng() * 750) * radiusKm); // Scaled
     const rating = parseFloat((4.5 + itemRng() * 0.5).toFixed(1)); // 4.5 to 5.0
     
     const bearingDegrees = Math.round((angle * 180) / Math.PI + 360) % 360;
@@ -176,6 +178,8 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
   // States for interactive distance hover overlay on the 1km circle
   const [hoverDistance, setHoverDistance] = useState<number | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
+  const [radiusKm, setRadiusKm] = useState<number>(1.0);
+  const [currentMouseDistPx, setCurrentMouseDistPx] = useState<number | null>(null);
 
   // Reset when activity or modal open state changes
   useEffect(() => {
@@ -184,6 +188,8 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
     setNearbyServices([]);
     setHoverDistance(null);
     setHoverPos(null);
+    setRadiusKm(1.0);
+    setCurrentMouseDistPx(null);
   }, [activity, isOpen]);
 
   // Trigger click sound when switching map theme
@@ -195,6 +201,22 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
   const handleClose = () => {
     playChime('click');
     onClose();
+  };
+
+  const handleZoomIn = () => {
+    setRadiusKm(prev => {
+      const next = Math.max(0.2, parseFloat((prev - 0.1).toFixed(1)));
+      return next;
+    });
+    playChime('click');
+  };
+
+  const handleZoomOut = () => {
+    setRadiusKm(prev => {
+      const next = Math.min(3.0, parseFloat((prev + 0.1).toFixed(1)));
+      return next;
+    });
+    playChime('click');
   };
 
   // Generate deterministic details based on the activity and destination name
@@ -266,6 +288,120 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
     return f();
   }
 
+  // Sync nearby services if radius updates and scan is active
+  useEffect(() => {
+    if (showNearby && activity && mapData) {
+      const generated = generateNearbyServices(activity.title, destinationName, mapData.actX, mapData.actY, radiusKm);
+      setNearbyServices(generated);
+    }
+  }, [radiusKm, showNearby, activity, destinationName, mapData]);
+
+  // Handle click on map area to dynamically scale the circle radius
+  const handleMapClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * 400;
+    const svgY = ((e.clientY - rect.top) / rect.height) * 300;
+    
+    if (!mapData) return;
+    
+    // Check distance in SVG pixels from active waypoint
+    const dx = svgX - mapData.actX;
+    const dy = svgY - mapData.actY;
+    const pxDist = Math.sqrt(dx * dx + dy * dy);
+    
+    // Convert to km: 60px = 1.0km
+    let newRadius = pxDist / 60;
+    newRadius = Math.max(0.2, Math.min(5.0, parseFloat(newRadius.toFixed(1))));
+    
+    setRadiusKm(newRadius);
+    playChime('click');
+  };
+
+  // Handle wheel events on the map view to dynamically adjust radius
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const zoomDirection = e.deltaY > 0 ? -1 : 1;
+    setRadiusKm(prev => {
+      const next = Math.max(0.2, Math.min(5.0, parseFloat((prev + zoomDirection * 0.1).toFixed(1))));
+      return next;
+    });
+  };
+
+  const handleCircleMouseMove = (e: React.MouseEvent<SVGCircleElement>) => {
+    const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+    if (!rect || !mapData) return;
+    
+    // Calculate SVG coordinates
+    const svgX = ((e.clientX - rect.left) / rect.width) * 400;
+    const svgY = ((e.clientY - rect.top) / rect.height) * 300;
+    
+    // Distance from actX, actY
+    const dx = svgX - mapData.actX;
+    const dy = svgY - mapData.actY;
+    const pxDist = Math.sqrt(dx * dx + dy * dy);
+    // Convert pixels to km (60 pixels = 1.0 km)
+    const calculatedKm = pxDist / 60;
+    
+    setHoverDistance(calculatedKm);
+    
+    // Floating label position relative to container '#map-modal-container'
+    const container = document.getElementById('map-modal-container');
+    const containerRect = container?.getBoundingClientRect();
+    if (containerRect) {
+      setHoverPos({
+        x: e.clientX - containerRect.left,
+        y: e.clientY - containerRect.top
+      });
+    }
+  };
+
+  const getCircleBorderColor = () => {
+    if (currentMouseDistPx === null || !mapData) {
+      return 'rgba(16, 185, 129, 0.35)';
+    }
+    
+    const targetRadius = radiusKm * 60;
+    const diff = Math.abs(currentMouseDistPx - targetRadius);
+    const span = 40;
+    const proximity = Math.max(0, 1 - (diff / span));
+    
+    const r = Math.round(16 + (239 - 16) * proximity);
+    const g = Math.round(185 + (68 - 185) * proximity);
+    const b = Math.round(129 + (68 - 129) * proximity);
+    const alpha = (0.35 + proximity * 0.45).toFixed(2);
+    
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const getCircleFillColor = () => {
+    if (currentMouseDistPx === null || !mapData) {
+      return 'rgba(16, 185, 129, 0.02)';
+    }
+    
+    const targetRadius = radiusKm * 60;
+    const diff = Math.abs(currentMouseDistPx - targetRadius);
+    const span = 40;
+    const proximity = Math.max(0, 1 - (diff / span));
+    
+    const r = Math.round(16 + (239 - 16) * proximity);
+    const g = Math.round(185 + (68 - 185) * proximity);
+    const b = Math.round(129 + (68 - 129) * proximity);
+    const alpha = (0.02 + proximity * 0.06).toFixed(3);
+    
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const nearbyInCircleCount = useMemo(() => {
+    if (!nearbyServices || nearbyServices.length === 0 || !mapData) return 0;
+    const targetRadiusPx = radiusKm * 60;
+    return nearbyServices.filter(svc => {
+      const dx = svc.x - mapData.actX;
+      const dy = svc.y - mapData.actY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return dist <= targetRadiusPx;
+    }).length;
+  }, [nearbyServices, radiusKm, mapData]);
+
   const handleToggleNearby = () => {
     playChime('click');
     if (!showNearby) {
@@ -273,7 +409,7 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
       setShowNearby(true);
       setTimeout(() => {
         if (activity && mapData) {
-          const generated = generateNearbyServices(activity.title, destinationName, mapData.actX, mapData.actY);
+          const generated = generateNearbyServices(activity.title, destinationName, mapData.actX, mapData.actY, radiusKm);
           setNearbyServices(generated);
         }
         setLoadingNearby(false);
@@ -321,6 +457,12 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
             animation: pulseScale 2s infinite ease-in-out;
             transform-origin: center;
           }
+          .radius-indicator-circle {
+            transition: all 0.3s ease-in-out;
+          }
+          .radius-indicator-label {
+            transition: all 0.3s ease-in-out;
+          }
         `}} />
 
         {/* Modal Header */}
@@ -353,8 +495,33 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
           <div className="lg:col-span-7 p-6 border-b lg:border-b-0 lg:border-r border-white/5 flex flex-col justify-between space-y-4">
             
             {/* Map Canvas Frame */}
-            <div className="relative aspect-[4/3] rounded-2xl border border-white/5 overflow-hidden bg-ink-950 shadow-inner">
+            <div className="activity-map-modal-content relative aspect-[4/3] rounded-2xl border border-white/5 overflow-hidden bg-ink-950 shadow-inner">
               
+              {/* Zoom Control Buttons */}
+              <div className="absolute top-14 right-3 z-10 flex flex-col gap-1 bg-ink-950/95 backdrop-blur border border-white/10 rounded-xl p-1 shadow-lg" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  id="map-zoom-in"
+                  onClick={handleZoomIn}
+                  disabled={radiusKm <= 0.2}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer outline-none"
+                  title="Zoom In (Decrease range radius)"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <div className="h-px bg-white/5 mx-1" />
+                <button
+                  type="button"
+                  id="map-zoom-out"
+                  onClick={handleZoomOut}
+                  disabled={radiusKm >= 3.0}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer outline-none"
+                  title="Zoom Out (Increase range radius)"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               {/* Floating Satellite/Standard View Toggle */}
               <div className="absolute top-3 left-3 z-10 flex gap-1 bg-ink-950/95 backdrop-blur border border-white/10 rounded-xl p-1 shadow-lg">
                 <button
@@ -389,6 +556,58 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                 </button>
               </div>
 
+              {/* Radar Scanner Overlay */}
+              <div 
+                onClick={handleToggleNearby}
+                className="absolute top-[52px] left-3 z-10 bg-ink-950/95 backdrop-blur border border-white/10 rounded-xl p-2.5 shadow-lg flex flex-col gap-1 w-44 cursor-pointer hover:border-white/20 hover:bg-ink-900/95 transition-all group select-none"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-mono text-slate-500 font-bold uppercase tracking-wider">RADAR SCANNER</span>
+                  <div className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      loadingNearby 
+                        ? 'bg-amber-400 animate-pulse' 
+                        : showNearby 
+                        ? 'bg-emerald-400 animate-pulse' 
+                        : 'bg-slate-600'
+                    }`} />
+                    <span className="text-[7px] font-mono text-slate-400 font-black uppercase">
+                      {loadingNearby ? 'SCANNING' : showNearby ? 'ACTIVE' : 'STANDBY'}
+                    </span>
+                  </div>
+                </div>
+                
+                {loadingNearby ? (
+                  <div className="flex items-center gap-2 py-1">
+                    <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />
+                    <span className="text-[10px] font-mono text-slate-400">Scanning range...</span>
+                  </div>
+                ) : showNearby ? (
+                  <div className="py-0.5">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-display font-bold text-emerald-400 font-mono">
+                        {nearbyInCircleCount}
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-400">
+                        {nearbyInCircleCount === 1 ? 'service' : 'services'}
+                      </span>
+                    </div>
+                    <span className="text-[8px] font-mono text-slate-500 leading-none">
+                      detected within {radiusKm.toFixed(1)}km circle
+                    </span>
+                  </div>
+                ) : (
+                  <div className="py-0.5">
+                    <span className="text-[10px] text-slate-400 group-hover:text-emerald-400 transition-colors font-medium block">
+                      Enable scanning
+                    </span>
+                    <span className="text-[8px] text-slate-500 font-mono leading-none block mt-0.5">
+                      Click to activate radar
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Dynamic Theme Map Overlays */}
               {theme === 'satellite' && (
                 <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
@@ -403,6 +622,8 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                 className={`w-full h-full transition-all duration-300 ${
                   theme === 'terrain' ? 'bg-amber-950/10' : theme === 'satellite' ? 'bg-indigo-950/20' : 'bg-ink-950'
                 }`}
+                onClick={handleMapClick}
+                onWheel={handleWheel}
                 onMouseMove={(e) => {
                   const svg = e.currentTarget;
                   const rect = svg.getBoundingClientRect();
@@ -415,9 +636,10 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                   const dy = svgY - mapData.actY;
                   const distPx = Math.sqrt(dx * dx + dy * dy);
                   
-                  // Check if mouse is within the 1km radius circle (60 pixels radius on SVG)
-                  if (distPx <= 60) {
-                    // 60px = 1.0 km
+                  setCurrentMouseDistPx(distPx);
+                  
+                  // Check if mouse is within the radius circle (radiusKm * 60 pixels radius on SVG)
+                  if (distPx <= radiusKm * 60) {
                     const distKm = distPx / 60;
                     setHoverDistance(distKm);
                     setHoverPos({ x: svgX, y: svgY });
@@ -429,6 +651,7 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                 onMouseLeave={() => {
                   setHoverDistance(null);
                   setHoverPos(null);
+                  setCurrentMouseDistPx(null);
                 }}
               >
                 {/* Coastal Line / River (deterministic curve) */}
@@ -531,40 +754,46 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                   </text>
                 </g>
 
-                {/* Target Pin (Activity Location) */}
-                {/* 1km Radius Indicator Circle around the Target Pin */}
+                 {/* Target Pin (Activity Location) */}
+                {/* Dynamic Radius Indicator Circle around the Target Pin */}
                 <g>
-                  {/* Outer Dashed 1km Circle */}
+                  {/* Outer Dashed Circle */}
                   <circle 
                     cx={mapData.actX} 
                     cy={mapData.actY} 
-                    r="60" 
-                    fill="rgba(244,63,94,0.03)" 
-                    stroke="rgba(244,63,94,0.25)" 
-                    strokeWidth="1.2" 
+                    r={radiusKm * 60} 
+                    fill={getCircleFillColor()} 
+                    stroke={getCircleBorderColor()} 
+                    strokeWidth="1.5" 
                     strokeDasharray="3,3" 
+                    className="radius-indicator-circle"
+                    style={{ transition: 'all 0.3s ease-in-out' }}
                   />
                   {/* Text label indicating radius */}
-                  <g transform={`translate(${mapData.actX}, ${mapData.actY + 66})`}>
+                  <g 
+                    className="radius-indicator-label" 
+                    transform={`translate(${mapData.actX}, ${mapData.actY + radiusKm * 60 + 8})`}
+                    style={{ transition: 'all 0.3s ease-in-out' }}
+                  >
                     <rect 
-                      x="-25" 
-                      y="-5" 
-                      width="50" 
-                      height="7" 
-                      rx="1.5" 
-                      fill="rgba(17, 24, 39, 0.85)" 
-                      stroke="rgba(244,63,94,0.15)"
-                      strokeWidth="0.5"
+                      x="-35" 
+                      y="-4.5" 
+                      width="70" 
+                      height="9" 
+                      rx="2.5" 
+                      fill="rgba(17, 24, 39, 0.9)" 
+                      stroke="rgba(244,63,94,0.35)"
+                      strokeWidth="0.75"
                     />
                     <text 
                       fill="#fda4af" 
-                      fontSize="4.5" 
+                      fontSize="5" 
                       fontWeight="bold" 
                       fontFamily="monospace" 
                       textAnchor="middle" 
-                      y="0"
+                      y="1.5"
                     >
-                      1KM RANGE
+                      {radiusKm.toFixed(1)}KM RANGE
                     </text>
                   </g>
                 </g>
@@ -699,6 +928,40 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
               {/* Compass Ring Overlaid */}
               <div className="absolute top-3 right-3 bg-ink-950/80 backdrop-blur border border-white/5 w-9 h-9 rounded-full flex items-center justify-center text-slate-400 text-[10px] font-mono font-bold">
                 {mapData.cardinalDir}
+              </div>
+
+              {/* Persistent Radius Label Overlay */}
+              <div 
+                id="persistent-radius-indicator"
+                className="absolute top-3 right-14 z-10 bg-rose-500/10 backdrop-blur border border-rose-500/20 rounded-xl px-2.5 py-1.5 text-[9px] font-mono text-rose-300 font-bold shadow-lg flex items-center gap-1.5 select-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                <span>RANGE: {radiusKm.toFixed(1)} KM</span>
+              </div>
+
+              {/* Dynamic Range Indicator Control */}
+              <div className="absolute bottom-3 right-3 z-10 bg-ink-950/90 backdrop-blur border border-white/10 rounded-xl p-2 shadow-lg flex flex-col gap-1 w-36 select-none" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-mono text-slate-500 font-bold uppercase tracking-wider">Indicator Radius</span>
+                  <span className="text-[10px] font-mono text-rose-400 font-black">{radiusKm.toFixed(1)} km</span>
+                </div>
+                <input 
+                  type="range"
+                  min="0.2"
+                  max="3.0"
+                  step="0.1"
+                  value={radiusKm}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setRadiusKm(val);
+                    playChime('click');
+                  }}
+                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                />
+                <span className="text-[7px] text-slate-500 font-mono text-center leading-tight">
+                  Click Map or Scroll to change
+                </span>
               </div>
             </div>
 

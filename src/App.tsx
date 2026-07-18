@@ -65,6 +65,7 @@ import { PackingWeightChart } from './components/PackingWeightChart';
 import { VatRefundCalculator } from './components/VatRefundCalculator';
 import { LiveLingualSuite } from './components/LiveLingualSuite';
 import { HardwareAuditCenter } from './components/HardwareAuditCenter';
+import { ActivityStopwatch } from './components/ActivityStopwatch';
 import {
   DESTINATIONS,
   STYLES,
@@ -75,6 +76,24 @@ import {
 } from './data';
 import { seededRandom, hashStr, fmtUSD, playChime } from './utils';
 import { generateDossierData, generateDossierTextString, getChaosBuffer } from './dossierGenerator';
+
+import placeholderAdventure from './assets/images/placeholder_adventure_1784364434719.jpg';
+import placeholderCulture from './assets/images/placeholder_culture_1784364443854.jpg';
+import placeholderRelaxation from './assets/images/placeholder_relaxation_1784364455288.jpg';
+import placeholderFoodie from './assets/images/placeholder_foodie_1784364465413.jpg';
+import placeholderFamily from './assets/images/placeholder_family_1784364478174.jpg';
+
+const CATEGORY_IMAGES: Record<string, string> = {
+  Adventure: placeholderAdventure,
+  Culture: placeholderCulture,
+  Relaxation: placeholderRelaxation,
+  Foodie: placeholderFoodie,
+  Family: placeholderFamily,
+};
+
+const getCategoryImage = (cat: string) => {
+  return CATEGORY_IMAGES[cat] || placeholderAdventure;
+};
 
 const TIER_BASE = { budget: 55, moderate: 130, luxury: 320 };
 const TIER_SPLIT = {
@@ -1503,14 +1522,14 @@ export default function App() {
                                     return (
                                       <div
                                         key={act.id}
-                                        className={`glass rounded-xl p-4 flex items-start gap-3.5 hover:border-white/20 transition-all ${
+                                        className={`glass rounded-xl p-4 flex items-start gap-4 hover:border-white/20 transition-all ${
                                           act.done ? 'opacity-40' : ''
                                         }`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleToggleActivity(activeDay, slot, act.id)}
-                                          className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all outline-none ${
+                                          className={`mt-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all outline-none ${
                                             act.done
                                               ? 'bg-blue-500 border-blue-500'
                                               : 'border-slate-500 hover:border-blue-400'
@@ -1519,58 +1538,79 @@ export default function App() {
                                           {act.done && <Check className="w-3 h-3 text-ink-950 stroke-[3]" />}
                                         </button>
 
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between gap-3">
-                                            <p className={`text-sm font-medium text-slate-100 leading-snug ${
-                                              act.done ? 'line-through text-slate-500' : ''
-                                            }`}>
-                                              {act.title}
-                                            </p>
-                                            {!act.done && (
+                                        <div className="flex-1 min-w-0 flex flex-col md:flex-row gap-4 justify-between items-stretch">
+                                          <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                            <div>
+                                              <div className="flex items-start justify-between gap-3">
+                                                <p className={`text-sm font-medium text-slate-100 leading-snug ${
+                                                  act.done ? 'line-through text-slate-500' : ''
+                                                }`}>
+                                                  {act.title}
+                                                </p>
+                                                <span className="shrink-0 text-xs font-mono text-slate-400 font-semibold">
+                                                  {fmtUSD(act.cost)}
+                                                </span>
+                                              </div>
+                                              
+                                              <div className="flex flex-wrap items-center gap-3 mt-2.5">
+                                                {!act.done && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      playChime('click');
+                                                      setMapActivity(act);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium transition cursor-pointer outline-none"
+                                                  >
+                                                    <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                                    <span>Show on Map</span>
+                                                  </button>
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleToggleFavorite(act, itinerary[activeDay].day, slot)}
+                                                  className="inline-flex items-center gap-1 text-[11px] font-medium transition cursor-pointer outline-none text-slate-400 hover:text-rose-400 group/fav"
+                                                >
+                                                  <Heart
+                                                    className={`w-3.5 h-3.5 transition-all ${
+                                                      favorites.some(f => f.activity.id === act.id)
+                                                        ? 'fill-rose-500 text-rose-500 scale-110'
+                                                        : 'text-slate-500 group-hover/fav:text-rose-400'
+                                                    }`}
+                                                  />
+                                                  <span className={favorites.some(f => f.activity.id === act.id) ? 'text-rose-400' : 'text-slate-400 group-hover/fav:text-rose-400'}>
+                                                    {favorites.some(f => f.activity.id === act.id) ? 'Saved' : 'Save'}
+                                                  </span>
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            {/* Stopwatch Time Tracker */}
+                                            <ActivityStopwatch activityId={act.id} />
+
+                                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
+                                              <span className={`text-[10px] font-mono uppercase tracking-wide border rounded-full px-2.5 py-0.5 ${catColors}`}>
+                                                {act.cat}
+                                              </span>
                                               <button
                                                 type="button"
-                                                onClick={() => {
-                                                  playChime('click');
-                                                  setMapActivity(act);
-                                                }}
-                                                className="inline-flex items-center gap-1 mt-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium transition cursor-pointer outline-none"
+                                                onClick={() => handleSwapActivity(activeDay, slot, act.id)}
+                                                className="text-[11px] text-slate-500 hover:text-blue-400 flex items-center gap-1 transition ml-auto outline-none"
                                               >
-                                                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
-                                                <span>Show on Map</span>
+                                                <Shuffle className="w-3 h-3" /> Swap
                                               </button>
-                                            )}
-                                            <button
-                                              type="button"
-                                              onClick={() => handleToggleFavorite(act, itinerary[activeDay].day, slot)}
-                                              className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium transition cursor-pointer outline-none text-slate-400 hover:text-rose-400 group"
-                                            >
-                                              <Heart
-                                                className={`w-3.5 h-3.5 transition-all ${
-                                                  favorites.some(f => f.activity.id === act.id)
-                                                    ? 'fill-rose-500 text-rose-500 scale-110'
-                                                    : 'text-slate-500 group-hover:text-rose-400'
-                                                }`}
-                                              />
-                                              <span className={favorites.some(f => f.activity.id === act.id) ? 'text-rose-400' : 'text-slate-400 group-hover:text-rose-400'}>
-                                                {favorites.some(f => f.activity.id === act.id) ? 'Saved' : 'Save'}
-                                              </span>
-                                            </button>
-                                            <span className="shrink-0 text-xs font-mono text-slate-400 font-semibold">
-                                              {fmtUSD(act.cost)}
-                                            </span>
+                                            </div>
                                           </div>
-                                          
-                                          <div className="flex items-center gap-2 mt-2">
-                                            <span className={`text-[10px] font-mono uppercase tracking-wide border rounded-full px-2.5 py-0.5 ${catColors}`}>
-                                              {act.cat}
-                                            </span>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleSwapActivity(activeDay, slot, act.id)}
-                                              className="text-[11px] text-slate-500 hover:text-blue-400 flex items-center gap-1 transition ml-auto outline-none"
-                                            >
-                                              <Shuffle className="w-3 h-3" /> Swap
-                                            </button>
+
+                                          {/* AI-Generated Category Placeholder Image */}
+                                          <div className="w-full md:w-24 h-32 md:h-24 rounded-lg overflow-hidden shrink-0 border border-white/5 relative bg-ink-950 group/img shadow-md">
+                                            <img
+                                              src={getCategoryImage(act.cat)}
+                                              alt={act.cat}
+                                              referrerPolicy="no-referrer"
+                                              className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-ink-950/55 via-transparent to-transparent pointer-events-none" />
                                           </div>
                                         </div>
                                       </div>
