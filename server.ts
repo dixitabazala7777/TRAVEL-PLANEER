@@ -10,7 +10,14 @@ const app = express();
 const PORT = 3000;
 
 // Initialize Gemini API
-const ai = new GoogleGenAI(process.env.GEMINI_API_KEY || "");
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 app.use(express.json());
 
@@ -39,13 +46,15 @@ Return the result in a clean JSON format:
 }
 Only return the raw JSON.`;
 
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} } as any],
+    const result = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} } as any],
+      }
     });
 
-    const responseText = result.response.text();
+    const responseText = result.text;
     // Simple JSON extraction in case of markdown formatting
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
@@ -95,13 +104,15 @@ Return the suggestions strictly as a JSON object:
 }
 Only return raw JSON.`;
 
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} } as any],
+    const result = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} } as any],
+      }
     });
 
-    const responseText = result.response.text();
+    const responseText = result.text;
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
 

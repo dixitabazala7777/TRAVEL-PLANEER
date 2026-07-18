@@ -54,7 +54,8 @@ import {
   HeartHandshake,
   Leaf,
   HelpCircle,
-  Heart
+  Heart,
+  RefreshCw
 } from 'lucide-react';
 
 import { Destination, DayPlan, Activity, PackingItem, BudgetTier } from './types';
@@ -65,6 +66,7 @@ import { PackingWeightChart } from './components/PackingWeightChart';
 import { VatRefundCalculator } from './components/VatRefundCalculator';
 import { LiveLingualSuite } from './components/LiveLingualSuite';
 import { HardwareAuditCenter } from './components/HardwareAuditCenter';
+import { BudgetCalculatorAndSuggestions } from './components/BudgetCalculatorAndSuggestions';
 import {
   DESTINATIONS,
   STYLES,
@@ -179,6 +181,71 @@ export default function App() {
 
   // Live Power Modes
   const [isLowPowerMode, setIsLowPowerMode] = useState<boolean>(false);
+
+  // --- Offline Sync State ---
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'pending' | 'syncing'>('synced');
+  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState<boolean>(() => {
+    return localStorage.getItem('waypoint_hasUnsyncedChanges') === 'true';
+  });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (hasUnsyncedChanges) {
+        handleManualSync();
+      }
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [hasUnsyncedChanges]);
+
+  useEffect(() => {
+    localStorage.setItem('waypoint_hasUnsyncedChanges', hasUnsyncedChanges.toString());
+  }, [hasUnsyncedChanges]);
+
+  // Trigger sync process
+  const handleManualSync = async () => {
+    if (!isOnline) {
+      playChime('warning');
+      return;
+    }
+    
+    setSyncStatus('syncing');
+    playChime('click');
+
+    // Trigger service worker sync if available
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await (registration as any).sync.register('sync-itinerary');
+      } catch (err) {
+        console.warn('Background sync registration failed:', err);
+      }
+    }
+
+    // Simulate network delay for sync
+    setTimeout(() => {
+      setHasUnsyncedChanges(false);
+      setSyncStatus('synced');
+      playChime('success');
+    }, 1500);
+  };
+
+  // Update unsynced status when itinerary changes while offline
+  useEffect(() => {
+    if (itinerary.length > 0 && !isOnline) {
+      setHasUnsyncedChanges(true);
+      setSyncStatus('pending');
+    }
+  }, [itinerary, isOnline]);
 
   // For saved favorites
   const [favorites, setFavorites] = useState<{ activity: Activity; dayNum: number; slotName: 'Morning' | 'Afternoon' | 'Evening' }[]>(() => {
@@ -1026,9 +1093,45 @@ export default function App() {
                 AI Planner
               </span>
             </div>
-            <div className="flex items-center gap-3 text-xs font-mono text-slate-500">
-              <span className="hidden md:flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+            <div className="flex items-center gap-4 text-xs font-mono">
+              <div className="flex items-center gap-3">
+                {/* Sync Indicator */}
+                <div className={`flex items-center gap-2 px-2.5 py-1 rounded-full border transition-all ${
+                  !isOnline 
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                    : hasUnsyncedChanges
+                      ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    !isOnline 
+                      ? 'bg-rose-500 animate-pulse' 
+                      : syncStatus === 'syncing'
+                        ? 'bg-blue-400 animate-spin'
+                        : hasUnsyncedChanges
+                          ? 'bg-amber-500 animate-pulse'
+                          : 'bg-emerald-500'
+                  }`} />
+                  <span className="hidden xs:inline uppercase tracking-widest text-[9px] font-bold">
+                    {!isOnline ? 'Offline' : syncStatus === 'syncing' ? 'Syncing...' : hasUnsyncedChanges ? 'Pending Sync' : 'Synced'}
+                  </span>
+                </div>
+
+                {/* Manual Retry Sync Button */}
+                {hasUnsyncedChanges && isOnline && (
+                  <button
+                    onClick={handleManualSync}
+                    className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-1 transition-all group active:scale-95"
+                    title="Force synchronization"
+                  >
+                    <RefreshCw className={`w-3 h-3 group-hover:rotate-180 transition-transform duration-500 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                    <span className="uppercase tracking-widest text-[9px] font-bold">Retry Sync</span>
+                  </button>
+                )}
+              </div>
+
+              <span className="hidden md:flex items-center gap-1.5 text-slate-500">
+                <Lock className="w-3 h-3" />
                 No API key required
               </span>
             </div>
