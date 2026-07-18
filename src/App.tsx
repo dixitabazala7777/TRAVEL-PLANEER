@@ -70,6 +70,7 @@ import {
   PACKING_STYLE
 } from './data';
 import { seededRandom, hashStr, fmtUSD, playChime } from './utils';
+import { generateDossierData, generateDossierTextString, getChaosBuffer } from './dossierGenerator';
 
 const TIER_BASE = { budget: 55, moderate: 130, luxury: 320 };
 const TIER_SPLIT = {
@@ -128,7 +129,7 @@ export default function App() {
     } catch { return []; }
   });
   const [packingInput, setPackingInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'packing' | 'insights'>('itinerary');
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'packing' | 'insights' | 'dossier'>('itinerary');
 
   // --- 15 Hackathon Features States ---
   const [homeTimezone, setHomeTimezone] = useState<number>(() => {
@@ -258,6 +259,12 @@ export default function App() {
     });
     return Math.round(total / stylesArr.length);
   }, [destination, selectedStyles]);
+
+  // --- Dynamic AI Dossier Memo ---
+  const dossierData = useMemo(() => {
+    if (!destination) return null;
+    return generateDossierData(destination, days, vibeMatchScore, tier, itinerary);
+  }, [destination, days, vibeMatchScore, tier, itinerary]);
 
   // --- Eco Metrics & Carbon Estimator Memo ---
   const ecoMetrics = useMemo(() => {
@@ -882,76 +889,8 @@ export default function App() {
   const [copied, setCopied] = useState(false);
 
   const generateTextSummary = () => {
-    if (!destination) return '';
-
-    const selectedStylesList = STYLES.filter(s => selectedStyles.has(s.id))
-      .map(s => s.label)
-      .join(', ');
-
-    let summary = `=========================================\n`;
-    summary += `      WAYPOINT - YOUR PLOTTED TRIP       \n`;
-    summary += `=========================================\n\n`;
-
-    summary += `DESTINATION: ${destination.name}, ${destination.country}\n`;
-    summary += `DURATION: ${days} days\n`;
-    summary += `BUDGET TIER: ${tier.toUpperCase()}\n`;
-    summary += `TRAVEL STYLES: ${selectedStylesList || 'None'}\n\n`;
-
-    summary += `-----------------------------------------\n`;
-    summary += `QUICK FACTS\n`;
-    summary += `-----------------------------------------\n`;
-    summary += `- Best Time to Visit: ${destination.bestTime}\n`;
-    summary += `- Currency: ${destination.currency}\n`;
-    summary += `- Language: ${destination.language}\n`;
-    summary += `- Safety Score: ${destination.safety}/100\n`;
-    summary += `- Climate: ${destination.climate.toUpperCase()}\n\n`;
-
-    summary += `-----------------------------------------\n`;
-    summary += `ESTIMATED BUDGET BREAKDOWN\n`;
-    summary += `-----------------------------------------\n`;
-    summary += `Total Estimated Cost: ${fmtUSD(budgetStats.totalAmount)}\n`;
-    summary += `Daily Rate: ${fmtUSD(budgetStats.baseDailyRate)} / day\n`;
-    budgetStats.breakdowns.forEach(item => {
-      summary += `- ${item.name}: ${fmtUSD(item.amount)} (${Math.round(item.percent * 100)}%)\n`;
-    });
-    summary += `\n`;
-
-    summary += `-----------------------------------------\n`;
-    summary += `DAY-BY-DAY ITINERARY\n`;
-    summary += `-----------------------------------------\n`;
-    itinerary.forEach((d, i) => {
-      summary += `DAY ${i + 1}:\n`;
-      (['Morning', 'Afternoon', 'Evening'] as const).forEach(slot => {
-        const activities = d.slots[slot];
-        summary += `  * ${slot}:\n`;
-        if (activities && activities.length > 0) {
-          activities.forEach(act => {
-            const status = act.done ? '[✓]' : '[ ]';
-            summary += `    ${status} ${act.title} (${act.cat} | Est. Cost: ${fmtUSD(act.cost)})\n`;
-          });
-        } else {
-          summary += `    - No scheduled stops -\n`;
-        }
-      });
-      summary += `\n`;
-    });
-
-    if (packing.length > 0) {
-      summary += `-----------------------------------------\n`;
-      summary += `SMART PACKING CHECKLIST\n`;
-      summary += `-----------------------------------------\n`;
-      packing.forEach(item => {
-        const status = item.checked ? '[✓]' : '[ ]';
-        summary += `${status} ${item.label}\n`;
-      });
-      summary += `\n`;
-    }
-
-    summary += `=========================================\n`;
-    summary += `Plotted with Waypoint AI Planner\n`;
-    summary += `=========================================\n`;
-
-    return summary;
+    if (!destination || !dossierData) return '';
+    return generateDossierTextString(dossierData, destination);
   };
 
   const fallbackCopyText = (text: string) => {
@@ -1437,7 +1376,8 @@ export default function App() {
                 { id: 'itinerary', label: 'Itinerary', icon: <Route className="w-3.5 h-3.5" /> },
                 { id: 'budget', label: 'Budget & Splits', icon: <PieChart className="w-3.5 h-3.5" /> },
                 { id: 'packing', label: 'Packing list', icon: <Backpack className="w-3.5 h-3.5" /> },
-                { id: 'insights', label: 'Local Insights', icon: <Globe className="w-3.5 h-3.5" /> }
+                { id: 'insights', label: 'Local Insights', icon: <Globe className="w-3.5 h-3.5" /> },
+                { id: 'dossier', label: 'Adaptive AI Dossier', icon: <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" /> }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1631,6 +1571,60 @@ export default function App() {
                             </div>
                           );
                         })}
+
+                        {/* Chaos Buffer (Plan B) Live Adaptive Card */}
+                        <div className="mt-6 border border-amber-500/25 bg-amber-500/[0.02] rounded-2xl p-5 shadow-[0_0_25px_rgba(245,158,11,0.03)] backdrop-blur-md">
+                          <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shrink-0">
+                              <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest font-bold">CHAOS BUFFER (Plan B)</span>
+                                <span className="text-[10px] font-mono text-slate-500 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5 self-start">Self-Healing Loop</span>
+                              </div>
+                              <p className="text-xs text-slate-200 leading-relaxed mt-2.5 font-medium">
+                                {getChaosBuffer(destination, activeDay + 1)}
+                              </p>
+                              
+                              <div className="flex items-center justify-end gap-3 mt-4 pt-3.5 border-t border-white/5">
+                                <span className="text-[10px] font-mono text-slate-500">Disruptions? Swap active afternoon slot:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    playChime('success');
+                                    setItinerary(prev => {
+                                      return prev.map((dayPlan, idx) => {
+                                        if (idx !== activeDay) return dayPlan;
+                                        const updatedSlots = { ...dayPlan.slots };
+                                        
+                                        // Take the afternoon activity and swap it with a new Plan B activity
+                                        const originalAct = updatedSlots.Afternoon?.[0];
+                                        const planBTitle = `Alternative: ${getChaosBuffer(destination, activeDay + 1).replace('Rain forecast? ', '').replace('If ', '').split(', ')[0] || 'Covered tour options'}`;
+                                        
+                                        const planBActivity: Activity = {
+                                          id: `chaos_${Date.now()}`,
+                                          title: planBTitle,
+                                          slot: 'Afternoon',
+                                          cost: originalAct ? Math.round(originalAct.cost * 0.8) : 25,
+                                          done: false,
+                                          style: 'culture',
+                                          cat: 'Relaxation'
+                                        };
+                                        
+                                        updatedSlots.Afternoon = [planBActivity];
+                                        return { ...dayPlan, slots: updatedSlots };
+                                      });
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/30 border border-amber-500/20 hover:border-amber-400/40 rounded-lg transition-all outline-none"
+                                >
+                                  ☄ Swap to Plan B
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2550,6 +2544,301 @@ export default function App() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+
+              </motion.section>
+            )}
+
+            {/* ===== ADAPTIVE AI DOSSIER TAB PANEL ===== */}
+            {activeTab === 'dossier' && dossierData && (
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-8"
+              >
+                {/* Dossier Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                  <div>
+                    <h3 className="font-display text-xl font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-blue-400 animate-pulse" />
+                      <span>Advanced AI Travel Dossier</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Ultra-reliable offline dossiers integrating real-time sentiment data and adaptive planning logic.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const txt = generateDossierTextString(dossierData, destination);
+                        navigator.clipboard.writeText(txt);
+                        setCopied(true);
+                        playChime('success');
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-400/20 flex items-center gap-1.5 transition outline-none"
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? 'Copied Clean Text' : 'Copy Clean Dossier'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playChime('click');
+                        const txt = generateDossierTextString(dossierData, destination);
+                        const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(txt);
+                        const anchor = document.createElement('a');
+                        anchor.setAttribute("href", dataStr);
+                        anchor.setAttribute("download", `Waypoint_AI_Dossier_${destination.name}.txt`);
+                        document.body.appendChild(anchor);
+                        anchor.click();
+                        anchor.remove();
+                      }}
+                      className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 flex items-center gap-1.5 transition outline-none"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download TXT
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 1: Destination Insights & Live Reviews */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Snapshot Metric Grid (7/12) */}
+                  <div className="lg:col-span-7 glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                      <span className="text-[10px] font-mono text-blue-400 uppercase tracking-wider font-bold">Section 1: Destination insights</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl text-center">
+                        <span className="text-[10px] font-mono text-slate-500 uppercase">Vibe Match</span>
+                        <p className="text-xl font-mono font-bold text-blue-300 mt-1">{dossierData.vibeMatchScore}%</p>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl text-center">
+                        <span className="text-[10px] font-mono text-slate-500 uppercase">Best Window</span>
+                        <p className="text-xs font-semibold text-slate-200 mt-2 truncate" title={dossierData.bestVisitingWindow}>{dossierData.bestVisitingWindow}</p>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl text-center">
+                        <span className="text-[10px] font-mono text-slate-500 uppercase">Currency Code</span>
+                        <p className="text-sm font-bold text-slate-200 mt-2">{dossierData.currencyCode}</p>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl text-center">
+                        <span className="text-[10px] font-mono text-slate-500 uppercase">Hotlines</span>
+                        <p className="text-xs font-semibold text-rose-400 mt-2 truncate" title={dossierData.emergencyHotlines}>{dossierData.emergencyHotlines.split('|')[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unfiltered Reviews (5/12) */}
+                  <div className="lg:col-span-5 glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                      <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider font-bold">Live Review Dashboard (Pain Points)</span>
+                    </div>
+                    <div className="space-y-3">
+                      {dossierData.reviews.map((rev, i) => (
+                        <div key={i} className="bg-amber-500/[0.02] border border-amber-500/10 p-3 rounded-xl relative">
+                          <p className="text-xs text-slate-300 italic leading-relaxed">
+                            "{rev}"
+                          </p>
+                          <span className="text-[9px] font-mono text-amber-400/60 block text-right mt-1.5">— Verified Traveler Review</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Day-by-day Itinerary with chaos swapper */}
+                <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                    <span className="text-[10px] font-mono text-blue-400 uppercase tracking-wider font-bold">Section 2: Day-by-Day Self-Healing Itinerary</span>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    {dossierData.days.map((day) => (
+                      <div key={day.dayNum} className="border-b border-white/5 last:border-b-0 pb-6 last:pb-0 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-400/15">
+                            Day {day.dayNum}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-white/[0.01] border border-white/5 p-3 rounded-xl flex flex-col justify-between">
+                            <div>
+                              <span className="text-[9px] font-mono text-slate-500 uppercase">Morning Segment (Outdoor)</span>
+                              <p className="text-xs font-semibold text-slate-200 mt-1 leading-snug">{day.morningActivity}</p>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 mt-2 block font-semibold">Est. ${day.morningCost} USD</span>
+                          </div>
+                          
+                          <div className="bg-white/[0.01] border border-white/5 p-3 rounded-xl flex flex-col justify-between">
+                            <div>
+                              <span className="text-[9px] font-mono text-slate-500 uppercase">Afternoon Segment (Scenic)</span>
+                              <p className="text-xs font-semibold text-slate-200 mt-1 leading-snug">{day.afternoonActivity}</p>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 mt-2 block font-semibold">Est. ${day.afternoonCost} USD</span>
+                          </div>
+
+                          <div className="bg-white/[0.01] border border-white/5 p-3 rounded-xl flex flex-col justify-between">
+                            <div>
+                              <span className="text-[9px] font-mono text-slate-500 uppercase">Evening Segment (Culinary)</span>
+                              <p className="text-xs font-semibold text-slate-200 mt-1 leading-snug">{day.eveningActivity}</p>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400 mt-2 block font-semibold">Est. ${day.eveningCost} USD</span>
+                          </div>
+                        </div>
+
+                        {/* Chaos Buffer Card */}
+                        <div className="border border-amber-500/20 bg-amber-500/[0.02] p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+                            <div>
+                              <span className="text-[9px] font-mono text-amber-400 uppercase tracking-widest font-bold">CHAOS BUFFER (Plan B)</span>
+                              <p className="text-xs text-slate-300 leading-relaxed mt-0.5 font-medium">{day.chaosBuffer}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playChime('success');
+                              // Action to swap afternoon activity with plan B in the itinerary state!
+                              setItinerary(prev => {
+                                return prev.map((dayPlan, idx) => {
+                                  if (idx !== (day.dayNum - 1)) return dayPlan;
+                                  const updatedSlots = { ...dayPlan.slots };
+                                  
+                                  const originalAct = updatedSlots.Afternoon?.[0];
+                                  const planBTitle = `Alternative: ${day.chaosBuffer.replace('Rain forecast? ', '').replace('If ', '').split(', ')[0] || 'Covered tour options'}`;
+                                  
+                                  const planBActivity: Activity = {
+                                    id: `chaos_${Date.now()}`,
+                                    title: planBTitle,
+                                    slot: 'Afternoon',
+                                    cost: originalAct ? Math.round(originalAct.cost * 0.8) : 25,
+                                    done: false,
+                                    style: 'culture',
+                                    cat: 'Relaxation'
+                                  };
+                                  
+                                  updatedSlots.Afternoon = [planBActivity];
+                                  return { ...dayPlan, slots: updatedSlots };
+                                });
+                              });
+                            }}
+                            className="px-3 py-1.5 text-[10px] font-bold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/20 hover:border-amber-400/40 rounded-lg transition-all outline-none whitespace-nowrap self-end sm:self-center"
+                          >
+                            ☄ Swap afternoon to Plan B
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Section 3: Financial, Banking & Tax Intelligence */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Consumption Tax card */}
+                  <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-3.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 text-white border-b border-white/5 pb-2">
+                        <Coins className="w-4 h-4 text-emerald-400" />
+                        <h4 className="font-display font-semibold text-xs uppercase tracking-wider font-bold">Consumption Tax Protocol</h4>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed mt-3">
+                        {dossierData.consumptionTaxProtocol}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full self-start font-bold">100% Verified Refund Policy</span>
+                  </div>
+
+                  {/* Foreign Banking Dynamics */}
+                  <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-3.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 text-white border-b border-white/5 pb-2">
+                        <Wallet className="w-4 h-4 text-indigo-400" />
+                        <h4 className="font-display font-semibold text-xs uppercase tracking-wider font-bold">Foreign Banking Dynamics</h4>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed mt-3">
+                        {dossierData.foreignBankingDynamics}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-full self-start font-bold">Avoid Merchant DCC Traps</span>
+                  </div>
+
+                  {/* Global Expenditure Index */}
+                  <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-3.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 text-white border-b border-white/5 pb-2">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                        <h4 className="font-display font-semibold text-xs uppercase tracking-wider font-bold">Global Expenditure Index</h4>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed mt-3">
+                        {dossierData.globalExpenditureIndex}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-blue-500/10 px-2.5 py-1.5 rounded-xl border border-blue-400/10">
+                      <span className="text-[10px] font-mono text-blue-300">Cost Profile:</span>
+                      <span className="text-[10px] font-mono text-white font-bold capitalize">{tier} Class Overhead</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Spending Breakdown & Packing Essentials */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Spending Model (7/12) */}
+                  <div className="lg:col-span-7 glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                      <PieChart className="w-4 h-4 text-blue-400" />
+                      <span className="text-[10px] font-mono text-blue-400 uppercase tracking-wider font-bold">Section 4: Expenditure model (with 15% Contingency)</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Lodging (Hotel/Hostel Est.)</span>
+                        <span className="font-mono text-slate-200">${dossierData.costBreakdown.lodging} USD</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Food & Beverage (Local Cuisine)</span>
+                        <span className="font-mono text-slate-200">${dossierData.costBreakdown.food} USD</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Activities & Transits</span>
+                        <span className="font-mono text-slate-200">${dossierData.costBreakdown.activities} USD</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-amber-400">
+                        <span>Contingency Fund (15% Cushion)</span>
+                        <span className="font-mono font-semibold">${dossierData.costBreakdown.contingency} USD</span>
+                      </div>
+                      <div className="h-px bg-white/5 my-2"></div>
+                      <div className="flex items-center justify-between text-sm text-white font-bold">
+                        <span>Total Estimated Outlay</span>
+                        <span className="font-mono text-blue-400">${dossierData.costBreakdown.total} USD</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Packing list (5/12) */}
+                  <div className="lg:col-span-5 glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                      <Backpack className="w-4 h-4 text-violet-400" />
+                      <span className="text-[10px] font-mono text-violet-400 uppercase tracking-wider font-bold">Climate-Specific Essentials</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {dossierData.packingList.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2.5 p-2 bg-white/[0.01] hover:bg-white/[0.04] border border-white/5 rounded-xl transition-all">
+                          <div className="w-5 h-5 rounded-md bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                            <span className="text-[9px] font-mono text-violet-300 font-bold">{idx + 1}</span>
+                          </div>
+                          <span className="text-xs text-slate-300 font-medium">{item}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

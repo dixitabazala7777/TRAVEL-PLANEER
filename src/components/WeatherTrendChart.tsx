@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { CloudRain, Thermometer, Calendar, HelpCircle, AlertCircle } from 'lucide-react';
+import { CloudRain, Thermometer, Calendar, HelpCircle, AlertCircle, Shirt, Wind, Sun, Snowflake, ShieldAlert, Umbrella } from 'lucide-react';
 import { playChime } from '../utils';
 
 interface WeatherTrendChartProps {
@@ -128,6 +128,116 @@ export const WeatherTrendChart: React.FC<WeatherTrendChartProps> = ({ destinatio
     playChime('click');
     setUseFahrenheit(prev => !prev);
   };
+
+  // Determine outfit suggestions dynamically based on average high and max precipitation
+  const outfitArchetypes = useMemo(() => {
+    const temps = chartData.map(d => d.tempHigh);
+    const precips = chartData.map(d => d.precip);
+    const avgHigh = temps.length > 0 ? temps.reduce((a, b) => a + b, 0) / temps.length : 15;
+    const maxPrecip = precips.length > 0 ? Math.max(...precips) : 20;
+
+    if (maxPrecip > 50) {
+      return {
+        title: 'Wet Weather / Monsoon Mode',
+        description: `With rain probability peaking at ${maxPrecip}%, gear that blocks water and dries instantly is vital.`,
+        items: [
+          {
+            name: 'Full Waterproofing',
+            desc: 'Breathable seam-sealed Gore-Tex shell, waterproof hiking shoes/boots, and water-repellent bags.',
+            badge: 'Wet Weather Core',
+            icon: 'rain'
+          },
+          {
+            name: 'Humid Transit Casual',
+            desc: 'Lightweight quick-dry synthetic tee, stretch-mesh shorts, and hydrophobic socks that won’t trap sweat.',
+            badge: 'Fast-Dry Sport',
+            icon: 'wind'
+          },
+          {
+            name: 'Cozy Shelter Knitwear',
+            desc: 'A warm fleece pullover or soft cotton knit for relaxing in local bistros or waiting out storms indoors.',
+            badge: 'Cafe Comfort',
+            icon: 'shirt'
+          }
+        ]
+      };
+    } else if (avgHigh > 24) {
+      return {
+        title: 'Warm Climate / Summer Mode',
+        description: `Summery temperatures averaging a balmy ${avgHigh.toFixed(1)}°C call for breathable fabrics and active sun blocking.`,
+        items: [
+          {
+            name: 'Summer Casual',
+            desc: 'Linen shirts, cotton tees, ultra-breathable shorts, polarized sunglasses, and premium canvas sneakers.',
+            badge: 'Sun & Breeze',
+            icon: 'sun'
+          },
+          {
+            name: 'UV Protection Gear',
+            desc: 'Wide-brimmed adventure hat, UPF 50+ long-sleeved rash guard/trail shirt, and cooling microfiber neck gaiter.',
+            badge: 'High UV Shield',
+            icon: 'shield'
+          },
+          {
+            name: 'Chilled Interior Cover',
+            desc: 'A thin linen blazer, lightweight cardigan, or soft modal long-sleeve to survive heavily air-conditioned transit hubs.',
+            badge: 'Indoor Transit',
+            icon: 'shirt'
+          }
+        ]
+      };
+    } else if (avgHigh >= 12) {
+      return {
+        title: 'Mild Temperature / Temperate Mode',
+        description: `Comfortable mild conditions around ${avgHigh.toFixed(1)}°C with notable day-to-night temperature swings.`,
+        items: [
+          {
+            name: 'Light Layering',
+            desc: 'Premium merino wool undershirt, structured denim or chore jacket, active-stretch chinos, and supportive sneakers.',
+            badge: 'Comfort Versatility',
+            icon: 'shirt'
+          },
+          {
+            name: 'Smart Casual Dusk',
+            desc: 'Medium-gauge knit sweater, light trench coat, tailored trousers, and leather chelsea boots for twilight strolls.',
+            badge: 'Evening Rhythm',
+            icon: 'wind'
+          },
+          {
+            name: 'Windproof Daywear',
+            desc: 'Packable windbreaker, performance activewear joggers, and casual trail-runners for outdoor viewpoints.',
+            badge: 'Active Utility',
+            icon: 'shield'
+          }
+        ]
+      };
+    } else {
+      return {
+        title: 'Cold Climate / Insulated Shield',
+        description: `Brisk averages around ${avgHigh.toFixed(1)}°C require high-grade thermal shielding and windproof outer shells.`,
+        items: [
+          {
+            name: 'Heavy Insulation',
+            desc: 'Premium high-loft down parka, heavyweight thermal base layers (wool), thermal socks, and water-resistant winter boots.',
+            badge: 'Sub-Zero Shield',
+            icon: 'snow'
+          },
+          {
+            name: 'Windproof Urban Chic',
+            desc: 'Thick double-breasted wool overcoat, pure cashmere scarf, fleece-lined leather gloves, and windproof trousers.',
+            badge: 'Metro Winter',
+            icon: 'wind'
+          },
+          {
+            name: 'Thermal Transit Gear',
+            desc: 'Fleece-lined utility joggers, moisture-wicking athletic compression tops, and protective beanie.',
+            badge: 'Warm Mobility',
+            icon: 'shirt'
+          }
+        ]
+      };
+    }
+  }, [chartData]);
 
   const currentMonthName = MONTH_NAMES[travelMonth];
 
@@ -262,6 +372,40 @@ export const WeatherTrendChart: React.FC<WeatherTrendChartProps> = ({ destinatio
         <Thermometer className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-slate-400 leading-relaxed">
           <span className="text-slate-300 font-medium">Seasonal Pattern:</span> Temperature fluctuation remains standard for the {currentMonthName} climate. Precipitation ranges up to {Math.max(...chartData.map(d => d.precip))}% probability. Take layered gear!
+        </div>
+      </div>
+
+      {/* 3 Outfit Archetypes Section (Feature 14 Expansion) */}
+      <div className="mt-5 border-t border-white/5 pt-4 space-y-3">
+        <div className="flex items-center gap-2 text-white">
+          <Shirt className="w-4 h-4 text-pink-400" />
+          <h5 className="font-display font-semibold text-xs uppercase tracking-wider font-bold">Dynamic Outfit Archetypes ({outfitArchetypes.title})</h5>
+        </div>
+        <p className="text-[11px] text-slate-400 leading-normal mb-1.5">{outfitArchetypes.description}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {outfitArchetypes.items.map((item, idx) => {
+            let IconComponent = Shirt;
+            if (item.icon === 'rain') IconComponent = CloudRain;
+            if (item.icon === 'wind') IconComponent = Wind;
+            if (item.icon === 'sun') IconComponent = Sun;
+            if (item.icon === 'shield') IconComponent = ShieldAlert;
+            if (item.icon === 'snow') IconComponent = Snowflake;
+
+            return (
+              <div key={idx} className="bg-white/[0.01] hover:bg-white/[0.03] border border-white/5 rounded-xl p-3 flex flex-col justify-between space-y-2.5 transition-all">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-mono font-bold text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-400/10">
+                      {item.badge}
+                    </span>
+                    <IconComponent className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <h6 className="text-xs font-bold text-slate-200">{item.name}</h6>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">{item.desc}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
