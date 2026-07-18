@@ -171,6 +171,40 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
             {/* Map Canvas Frame */}
             <div className="relative aspect-[4/3] rounded-2xl border border-white/5 overflow-hidden bg-ink-950 shadow-inner">
               
+              {/* Floating Satellite/Standard View Toggle */}
+              <div className="absolute top-3 left-3 z-10 flex gap-1 bg-ink-950/95 backdrop-blur border border-white/10 rounded-xl p-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playChime('click');
+                    setTheme('vector');
+                  }}
+                  className={`px-2.5 py-1 text-[9px] font-mono font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer outline-none ${
+                    theme !== 'satellite'
+                      ? 'bg-blue-500/25 text-blue-300 border border-blue-400/20'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <Map className="w-3 h-3" />
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playChime('click');
+                    setTheme('satellite');
+                  }}
+                  className={`px-2.5 py-1 text-[9px] font-mono font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer outline-none ${
+                    theme === 'satellite'
+                      ? 'bg-blue-500/25 text-blue-300 border border-blue-400/20'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Satellite
+                </button>
+              </div>
+
               {/* Dynamic Theme Map Overlays */}
               {theme === 'satellite' && (
                 <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
