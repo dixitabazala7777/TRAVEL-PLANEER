@@ -62,6 +62,7 @@ import { CurrencyConverter } from './components/CurrencyConverter';
 import { WeatherTrendChart } from './components/WeatherTrendChart';
 import { ActivityMapModal } from './components/ActivityMapModal';
 import { PackingWeightChart } from './components/PackingWeightChart';
+import { VatRefundCalculator } from './components/VatRefundCalculator';
 import {
   DESTINATIONS,
   STYLES,
@@ -1395,14 +1396,17 @@ export default function App() {
               ))}
             </div>
 
-            {/* ===== ITINERARY TAB PANEL ===== */}
-            {activeTab === 'itinerary' && (
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
-              >
+            <AnimatePresence mode="wait">
+              {/* ===== ITINERARY TAB PANEL ===== */}
+              {activeTab === 'itinerary' && (
+                <motion.section
+                  key="itinerary"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-6"
+                >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   
                   {/* Left Column (8/12 width on desktop): Day selector & Slots list with lighting glows */}
@@ -1872,9 +1876,11 @@ export default function App() {
             {/* ===== BUDGET TAB PANEL ===== */}
             {activeTab === 'budget' && (
               <motion.section
+                key="budget"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
                 className="space-y-6"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2022,7 +2028,7 @@ export default function App() {
                 </div>
 
                 {/* Dynamic Bento Box Elements: Overage Alerts & Carbon Estimators */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   
                   {/* Feature 3: Smart Budget Overage Alert Matrix */}
                   <div className="glass rounded-2xl p-5 border border-white/5 flex flex-col justify-between">
@@ -2062,7 +2068,10 @@ export default function App() {
                   {/* Currency Conversion Assistant */}
                   <CurrencyConverter destinationCurrency={destination.currency} />
 
-                  {/* Feature 4: Eco-Footprint & Carbon Offset Estimator */}
+                  {/* Feature 4: VAT/GST Refund Assistant */}
+                  <VatRefundCalculator destination={destination} dossierData={dossierData} itinerary={itinerary} />
+
+                  {/* Feature 5: Eco-Footprint & Carbon Offset Estimator */}
                   <div className="glass rounded-2xl p-5 border border-white/5 space-y-4">
                     <div className="flex items-center gap-2 text-emerald-400 border-b border-white/5 pb-3">
                       <Leaf className="w-4 h-4" />
@@ -2101,9 +2110,11 @@ export default function App() {
             {/* ===== PACKING TAB PANEL ===== */}
             {activeTab === 'packing' && (
               <motion.section
+                key="packing"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
                 <div className="flex items-center justify-between">
@@ -2249,9 +2260,11 @@ export default function App() {
             {/* ===== LOCAL INSIGHTS TAB PANEL ===== */}
             {activeTab === 'insights' && (
               <motion.section
+                key="insights"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
                 className="space-y-6"
               >
                 {/* Header */}
@@ -2556,9 +2569,11 @@ export default function App() {
             {/* ===== ADAPTIVE AI DOSSIER TAB PANEL ===== */}
             {activeTab === 'dossier' && dossierData && (
               <motion.section
+                key="dossier"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
                 className="space-y-8"
               >
                 {/* Dossier Header */}
@@ -2847,7 +2862,8 @@ export default function App() {
 
               </motion.section>
             )}
-          </main>
+          </AnimatePresence>
+        </main>
         )}
       </div>
 

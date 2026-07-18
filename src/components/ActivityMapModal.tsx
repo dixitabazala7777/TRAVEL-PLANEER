@@ -1,5 +1,22 @@
-import React, { useState, useMemo } from 'react';
-import { X, MapPin, Compass, Navigation, Bus, Car, Footprints, Layers, Sparkles, Map } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  X, 
+  MapPin, 
+  Compass, 
+  Navigation, 
+  Bus, 
+  Car, 
+  Footprints, 
+  Layers, 
+  Sparkles, 
+  Map,
+  Star,
+  Loader2,
+  Coffee,
+  Shield,
+  Heart,
+  Store
+} from 'lucide-react';
 import { playChime, hashStr, seededRandom } from '../utils';
 import { Activity } from '../types';
 
@@ -12,6 +29,139 @@ interface ActivityMapModalProps {
 
 type MapTheme = 'vector' | 'terrain' | 'satellite';
 
+interface NearbyService {
+  id: string;
+  name: string;
+  type: 'atm' | 'pharmacy' | 'cafe' | 'store' | 'landmark';
+  rating: number;
+  distanceMeters: number;
+  bearingDegrees: number;
+  cardinalDir: string;
+  x: number; // offset x on map SVG
+  y: number; // offset y on map SVG
+}
+
+const getServiceIcon = (type: 'atm' | 'pharmacy' | 'cafe' | 'store' | 'landmark') => {
+  switch (type) {
+    case 'atm':
+      return Shield;
+    case 'pharmacy':
+      return Heart;
+    case 'cafe':
+      return Coffee;
+    case 'store':
+      return Store;
+    case 'landmark':
+      return MapPin;
+    default:
+      return MapPin;
+  }
+};
+
+const getServiceColor = (type: 'atm' | 'pharmacy' | 'cafe' | 'store' | 'landmark') => {
+  switch (type) {
+    case 'atm':
+      return {
+        bg: 'bg-emerald-500/10',
+        border: 'border-emerald-500/20',
+        text: 'text-emerald-400',
+        fill: '#10b981'
+      };
+    case 'pharmacy':
+      return {
+        bg: 'bg-rose-500/10',
+        border: 'border-rose-500/20',
+        text: 'text-rose-400',
+        fill: '#f43f5e'
+      };
+    case 'cafe':
+      return {
+        bg: 'bg-amber-500/10',
+        border: 'border-amber-500/20',
+        text: 'text-amber-400',
+        fill: '#f59e0b'
+      };
+    case 'store':
+      return {
+        bg: 'bg-blue-500/10',
+        border: 'border-blue-500/20',
+        text: 'text-blue-400',
+        fill: '#3b82f6'
+      };
+    case 'landmark':
+      return {
+        bg: 'bg-purple-500/10',
+        border: 'border-purple-500/20',
+        text: 'text-purple-400',
+        fill: '#a855f7'
+      };
+    default:
+      return {
+        bg: 'bg-slate-500/10',
+        border: 'border-slate-500/20',
+        text: 'text-slate-400',
+        fill: '#64748b'
+      };
+  }
+};
+
+const generateNearbyServices = (activityTitle: string, destinationName: string, actX: number, actY: number): NearbyService[] => {
+  const hash = hashStr(activityTitle + destinationName + "nearby");
+  const rng = seededRandom(hash);
+  
+  const types: ('atm' | 'pharmacy' | 'cafe' | 'store' | 'landmark')[] = ['atm', 'pharmacy', 'cafe', 'store', 'landmark'];
+  const names = {
+    atm: ['Global Cash ATM', 'Local Trust Bank ATM', 'Universal Express ATM', 'Secured Vault ATM'],
+    pharmacy: ['Crossroad Pharmacy', '24/7 Wellness Apothecary', 'City Care Pharmacy', 'Green Cross Chemist'],
+    cafe: ['Cornerstone Cafe', 'The Coffee Grind', 'Bakehouse & Co.', 'Aroma Espresso Lounge'],
+    store: ['Express Market', 'Boutique Souvenirs', 'Metro Mart 24', 'Central Bodega'],
+    landmark: ['Scenic Viewpoint', 'Historical Fountain', 'Peace Monument', 'Public Gardens']
+  };
+
+  const count = 3 + Math.floor(rng() * 3); // 3 to 5 items
+  const services: NearbyService[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const itemRng = seededRandom(hash + i * 888);
+    const type = types[Math.floor(itemRng() * types.length)];
+    const typeNames = names[type];
+    const name = typeNames[Math.floor(itemRng() * typeNames.length)];
+    
+    // Position relative to active waypoint (actX, actY)
+    // Keep them inside the map bounds (20 to 380 for x, 20 to 280 for y)
+    const angle = itemRng() * Math.PI * 2;
+    const distancePixels = 25 + itemRng() * 35; // 25 to 60 pixels radius (approx 1km)
+    
+    let x = actX + Math.cos(angle) * distancePixels;
+    let y = actY + Math.sin(angle) * distancePixels;
+    
+    // Clamp inside the map bounds
+    x = Math.max(20, Math.min(380, x));
+    y = Math.max(20, Math.min(280, y));
+
+    const distanceMeters = Math.round(150 + itemRng() * 750); // 150m to 900m
+    const rating = parseFloat((4.5 + itemRng() * 0.5).toFixed(1)); // 4.5 to 5.0
+    
+    const bearingDegrees = Math.round((angle * 180) / Math.PI + 360) % 360;
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const cardinalDir = directions[Math.round(((bearingDegrees % 360) / 45)) % 8];
+
+    services.push({
+      id: `${type}-${i}`,
+      name,
+      type,
+      rating,
+      distanceMeters,
+      bearingDegrees,
+      cardinalDir,
+      x,
+      y
+    });
+  }
+
+  return services;
+};
+
 export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
   isOpen,
   onClose,
@@ -19,6 +169,16 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
   destinationName
 }) => {
   const [theme, setTheme] = useState<MapTheme>('vector');
+  const [showNearby, setShowNearby] = useState(false);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [nearbyServices, setNearbyServices] = useState<NearbyService[]>([]);
+
+  // Reset when activity or modal open state changes
+  useEffect(() => {
+    setShowNearby(false);
+    setLoadingNearby(false);
+    setNearbyServices([]);
+  }, [activity, isOpen]);
 
   // Trigger click sound when switching map theme
   const handleThemeChange = (newTheme: MapTheme) => {
@@ -99,6 +259,24 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
     const f = seededRandom(hash + index * 500);
     return f();
   }
+
+  const handleToggleNearby = () => {
+    playChime('click');
+    if (!showNearby) {
+      setLoadingNearby(true);
+      setShowNearby(true);
+      setTimeout(() => {
+        if (activity && mapData) {
+          const generated = generateNearbyServices(activity.title, destinationName, mapData.actX, mapData.actY);
+          setNearbyServices(generated);
+        }
+        setLoadingNearby(false);
+      }, 600);
+    } else {
+      setShowNearby(false);
+      setNearbyServices([]);
+    }
+  };
 
   if (!isOpen || !activity || !mapData) return null;
 
@@ -335,6 +513,49 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                     Active Waypoint
                   </text>
                 </g>
+
+                {/* Nearby Services Pins */}
+                {showNearby && !loadingNearby && nearbyServices.map((svc) => {
+                  const SvcColor = getServiceColor(svc.type);
+                  return (
+                    <g key={svc.id}>
+                      {/* Connection line from Active Waypoint to Nearby Service */}
+                      <line 
+                        x1={mapData.actX} 
+                        y1={mapData.actY} 
+                        x2={svc.x} 
+                        y2={svc.y} 
+                        stroke={SvcColor.fill} 
+                        strokeWidth="1.2" 
+                        strokeDasharray="2,3" 
+                        opacity="0.5"
+                      />
+                      {/* Subtle hover pulse */}
+                      <circle cx={svc.x} cy={svc.y} r="8" fill={SvcColor.fill} opacity="0.15" className="animate-pulse-scale" style={{ animationDuration: '3s' }} />
+                      
+                      {/* Small Pin Dot */}
+                      <circle cx={svc.x} cy={svc.y} r="4.5" fill={SvcColor.fill} stroke="#111827" strokeWidth="1" />
+                      <circle cx={svc.x} cy={svc.y} r="1.5" fill="#fff" />
+                      
+                      {/* Text Label with background pill for readability */}
+                      <g transform={`translate(${svc.x + 6}, ${svc.y - 3})`}>
+                        <rect 
+                          x="-2" 
+                          y="-6" 
+                          width={svc.name.length * 4.4 + 4} 
+                          height="9" 
+                          rx="2" 
+                          fill="rgba(17, 24, 39, 0.85)" 
+                          stroke="rgba(255,255,255,0.1)"
+                          strokeWidth="0.5"
+                        />
+                        <text fill="#cbd5e1" fontSize="5.5" fontFamily="sans-serif" fontWeight="bold">
+                          {svc.name}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
               </svg>
 
               {/* Calibration/Telemetry Info */}
@@ -410,6 +631,82 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                   <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5 animate-pulse" />
                   <span>Located approximately <strong className="text-slate-300">{mapData.distanceKm} km {mapData.cardinalDir}</strong> of the {destinationName} core station. Estimated transit times vary by style.</span>
                 </div>
+              </div>
+
+              {/* Nearby Toggle Widget */}
+              <div className="bg-ink-900/40 border border-white/5 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="text-emerald-400 w-4 h-4 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-200 block">Nearby Services & Landmarks</span>
+                      <span className="text-[10px] text-slate-500 block">Scan within 1km radius</span>
+                    </div>
+                  </div>
+                  
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={handleToggleNearby}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      showNearby ? 'bg-emerald-500' : 'bg-slate-850'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        showNearby ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Display State */}
+                {showNearby && (
+                  <div className="border-t border-white/5 pt-3 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    {loadingNearby ? (
+                      <div className="flex flex-col items-center justify-center py-6 gap-2">
+                        <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest animate-pulse">
+                          Querying Geo-Index...
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                        {nearbyServices.map((svc) => {
+                          const SvcIcon = getServiceIcon(svc.type);
+                          const SvcColorClass = getServiceColor(svc.type);
+                          return (
+                            <div 
+                              key={svc.id}
+                              className="bg-white/[0.02] border border-white/5 hover:border-white/10 p-2 rounded-xl flex items-center justify-between transition-all"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`w-7 h-7 rounded-lg ${SvcColorClass.bg} border ${SvcColorClass.border} flex items-center justify-center shrink-0`}>
+                                  <SvcIcon className={`w-3.5 h-3.5 ${SvcColorClass.text}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-200 block truncate leading-tight">
+                                    {svc.name}
+                                  </span>
+                                  <span className="text-[9px] text-slate-500 font-mono mt-0.5 block">
+                                    {svc.type.toUpperCase()} • {svc.distanceMeters}m {svc.cardinalDir}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-1 bg-amber-400/5 px-1.5 py-0.5 rounded border border-amber-400/10 shrink-0">
+                                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                <span className="text-[10px] font-mono font-bold text-amber-300">
+                                  {svc.rating}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Transit Estimations */}
