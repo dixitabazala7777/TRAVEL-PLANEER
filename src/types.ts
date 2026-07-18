@@ -42,6 +42,7 @@ export interface Activity {
   style: string;
   cost: number;
   done: boolean;
+  notes?: string;
 }
 
 export interface PackingItem {

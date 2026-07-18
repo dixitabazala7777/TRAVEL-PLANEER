@@ -68,6 +68,7 @@ import { LiveLingualSuite } from './components/LiveLingualSuite';
 import { HardwareAuditCenter } from './components/HardwareAuditCenter';
 import { ActivityStopwatch } from './components/ActivityStopwatch';
 import { FlightTracker } from './components/FlightTracker';
+import { BudgetCalculatorAndSuggestions } from './components/BudgetCalculatorAndSuggestions';
 import {
   DESTINATIONS,
   STYLES,
@@ -823,6 +824,21 @@ export default function App() {
         updatedSlots[slot] = updatedSlots[slot].map(act => {
           if (act.id !== actId) return act;
           return { ...act, done: !act.done };
+        });
+        return { ...dayPlan, slots: updatedSlots };
+      });
+    });
+  };
+
+  // --- Update activity notes ---
+  const handleUpdateActivityNotes = (dayIdx: number, slot: 'Morning' | 'Afternoon' | 'Evening', actId: string, notes: string) => {
+    setItinerary(prev => {
+      return prev.map((dayPlan, idx) => {
+        if (idx !== dayIdx) return dayPlan;
+        const updatedSlots = { ...dayPlan.slots };
+        updatedSlots[slot] = updatedSlots[slot].map(act => {
+          if (act.id !== actId) return act;
+          return { ...act, notes };
         });
         return { ...dayPlan, slots: updatedSlots };
       });
@@ -1668,6 +1684,18 @@ export default function App() {
                                                 {/* Stopwatch Time Tracker */}
                                                 <ActivityStopwatch activityId={act.id} />
 
+                                                {/* Personal Notes / Reminders */}
+                                                <div className="mt-3.5 space-y-1">
+                                                  <label className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest block">Personal Notes & Reminders</label>
+                                                  <textarea
+                                                    rows={1}
+                                                    value={act.notes || ''}
+                                                    onChange={(e) => handleUpdateActivityNotes(activeDay, slot, act.id, e.target.value)}
+                                                    placeholder="Add custom tickets, exact times, booking links or reminders..."
+                                                    className="w-full bg-white/[0.02] border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 focus:border-blue-500/30 focus:bg-ink-950/40 transition-all outline-none resize-y min-h-[34px] max-h-[120px]"
+                                                  />
+                                                </div>
+
                                                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
                                                   <span className={`text-[10px] font-mono uppercase tracking-wide border rounded-full px-2.5 py-0.5 ${catColors}`}>
                                                     {act.cat}
@@ -2242,6 +2270,17 @@ export default function App() {
                   </div>
 
                 </div>
+
+                <BudgetCalculatorAndSuggestions
+                  destinationId={destination?.id}
+                  destinationName={destination?.name}
+                  budgetTier={tier}
+                  travelStyles={Array.from(selectedStyles)}
+                  travelMonthNum={travelMonth}
+                  days={days}
+                  travelersCount={travelersCount}
+                  baseEstimatedAmount={budgetStats.totalAmount}
+                />
               </motion.section>
             )}
 

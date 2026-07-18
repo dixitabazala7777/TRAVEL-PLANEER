@@ -99,6 +99,85 @@ Do not include any markdown backticks or any wrapper in your response. Just retu
   }
 });
 
+// API Route for Places and Activities Suggestions using Google Search Grounding
+app.post("/api/places-suggestions", async (req, res) => {
+  try {
+    const { destination, budgetTier, travelStyles, month } = req.body;
+
+    if (!destination) {
+      return res.status(400).json({ error: "Missing required field: destination" });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY environment variable is not configured. Please add it in Settings > Secrets."
+      });
+    }
+
+    const tierLabel = budgetTier || "moderate";
+    const stylesStr = travelStyles && travelStyles.length > 0 ? travelStyles.join(", ") : "general sightseeing";
+    const monthStr = month || "upcoming trip";
+
+    const prompt = `Search for real-time places, activities, and dining spots in ${destination} tailored for a ${tierLabel} budget.
+The traveler is interested in these styles: ${stylesStr}. The travel month is ${monthStr}.
+Using the Google Search tool, find authentic, real-time local gems, highly rated places, free activities (if budget-tier), popular local restaurants, and interesting neighborhoods.
+Return the suggestions strictly as a JSON object of this structure:
+{
+  "places": [
+    {
+      "name": "Name of the place/activity (e.g. Musee d'Orsay, Bouillon Chartier)",
+      "category": "Attraction, Dining, Cafe, Outdoor, or Hidden Gem",
+      "description": "A scannable, detailed description explaining why it is perfect for this traveler, including tips on what to do.",
+      "estimatedCost": "Approximate cost or 'Free' (e.g. Free entry, or $15 - $25, or $8 for a snack)",
+      "recommendedTime": "Best time of day to visit (e.g. Morning, Late Afternoon, Evening)",
+      "addressOrArea": "Neighborhood or approximate location"
+    }
+  ],
+  "budgetTip": "A customized budget-saving tip specifically for ${destination} under ${tierLabel} conditions."
+}
+
+Do not include any markdown backticks or any wrapper in your response. Just return raw, valid JSON.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+      },
+    });
+
+    const responseText = response.text || "{}";
+    let data;
+    try {
+      data = JSON.parse(responseText.trim());
+    } catch (parseError) {
+      console.error("Failed to parse Gemini places response as JSON", responseText);
+      data = {
+        places: [],
+        budgetTip: "Could not retrieve specialized suggestions at this time.",
+        rawText: responseText
+      };
+    }
+
+    // Extract search grounding metadata sources/citations
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const citations = groundingChunks.map((chunk: any) => ({
+      title: chunk.web?.title || "Search Result",
+      uri: chunk.web?.uri || ""
+    })).filter((c: any) => c.uri);
+
+    res.json({
+      ...data,
+      citations
+    });
+
+  } catch (error: any) {
+    console.error("Places suggestions error:", error);
+    res.status(500).json({ error: error.message || "An error occurred during suggestions retrieval." });
+  }
+});
+
 // Setup Vite middleware for dev or static server for production
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
