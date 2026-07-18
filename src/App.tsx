@@ -63,6 +63,8 @@ import { WeatherTrendChart } from './components/WeatherTrendChart';
 import { ActivityMapModal } from './components/ActivityMapModal';
 import { PackingWeightChart } from './components/PackingWeightChart';
 import { VatRefundCalculator } from './components/VatRefundCalculator';
+import { LiveLingualSuite } from './components/LiveLingualSuite';
+import { HardwareAuditCenter } from './components/HardwareAuditCenter';
 import {
   DESTINATIONS,
   STYLES,
@@ -174,6 +176,9 @@ export default function App() {
 
   // For Interactive Activity Maps
   const [mapActivity, setMapActivity] = useState<Activity | null>(null);
+
+  // Live Power Modes
+  const [isLowPowerMode, setIsLowPowerMode] = useState<boolean>(false);
 
   // For saved favorites
   const [favorites, setFavorites] = useState<{ activity: Activity; dayNum: number; slotName: 'Morning' | 'Afternoon' | 'Evening' }[]>(() => {
@@ -1007,7 +1012,7 @@ export default function App() {
   };
 
   return (
-    <div className="text-slate-200 antialiased min-h-screen flex flex-col justify-between">
+    <div className={`text-slate-200 antialiased min-h-screen flex flex-col justify-between transition-all duration-300 ${isLowPowerMode ? 'contrast-[1.12] brightness-[0.96] text-white' : ''}`}>
       <div>
         {/* ============ NAVIGATION ============ */}
         <header className="sticky top-0 z-40 border-b border-white/5 glass">
@@ -2352,42 +2357,15 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Soundex Phonetic Survival Phrases */}
-                  <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-3.5">
-                    <div className="flex items-center gap-2 text-white">
-                      <Languages className="w-5 h-5 text-blue-400 shrink-0" />
-                      <div>
-                        <h4 className="font-display font-semibold text-sm">Survival Phonetic Matrix</h4>
-                        <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Tap to hear audio guide tones</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 max-h-[175px] overflow-y-auto pr-1">
-                      {survivalPhrases.map((phrase, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => playChime('click')}
-                          className="w-full text-left flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 transition-all outline-none group cursor-pointer"
-                        >
-                          <div>
-                            <p className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{phrase.original}</p>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{phrase.en}</p>
-                          </div>
-                          <div className="flex items-center gap-2 text-right">
-                            <span className="text-[10px] font-mono text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/10">
-                              /{phrase.phonetic}/
-                            </span>
-                            <Volume2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {/* Live AI Lingual Suite */}
+                  <LiveLingualSuite destination={destination} />
                 </div>
 
                 {/* Weather Trend Chart Section */}
                 <WeatherTrendChart destinationName={destination.name} travelMonth={travelMonth} />
+
+                {/* Live Operations & Hardware Safety Audit */}
+                <HardwareAuditCenter onPowerModeChange={(lowPower) => setIsLowPowerMode(lowPower)} />
 
                 {/* Grid row 2: Emergency hotline + Passport Validity Tracker + Currency Converter */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

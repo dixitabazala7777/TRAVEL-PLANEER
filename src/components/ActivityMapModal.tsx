@@ -173,11 +173,17 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [nearbyServices, setNearbyServices] = useState<NearbyService[]>([]);
 
+  // States for interactive distance hover overlay on the 1km circle
+  const [hoverDistance, setHoverDistance] = useState<number | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
+
   // Reset when activity or modal open state changes
   useEffect(() => {
     setShowNearby(false);
     setLoadingNearby(false);
     setNearbyServices([]);
+    setHoverDistance(null);
+    setHoverPos(null);
   }, [activity, isOpen]);
 
   // Trigger click sound when switching map theme
@@ -289,7 +295,7 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-3xl bg-ink-950 border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+      <div id="map-modal-container" className="relative w-full max-w-3xl bg-ink-950 border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
         
         {/* Animated flow style for the SVG transit line */}
         <style dangerouslySetInnerHTML={{ __html: `
@@ -397,6 +403,33 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                 className={`w-full h-full transition-all duration-300 ${
                   theme === 'terrain' ? 'bg-amber-950/10' : theme === 'satellite' ? 'bg-indigo-950/20' : 'bg-ink-950'
                 }`}
+                onMouseMove={(e) => {
+                  const svg = e.currentTarget;
+                  const rect = svg.getBoundingClientRect();
+                  const clientX = e.clientX - rect.left;
+                  const clientY = e.clientY - rect.top;
+                  const svgX = (clientX / rect.width) * 400;
+                  const svgY = (clientY / rect.height) * 300;
+                  
+                  const dx = svgX - mapData.actX;
+                  const dy = svgY - mapData.actY;
+                  const distPx = Math.sqrt(dx * dx + dy * dy);
+                  
+                  // Check if mouse is within the 1km radius circle (60 pixels radius on SVG)
+                  if (distPx <= 60) {
+                    // 60px = 1.0 km
+                    const distKm = distPx / 60;
+                    setHoverDistance(distKm);
+                    setHoverPos({ x: svgX, y: svgY });
+                  } else {
+                    setHoverDistance(null);
+                    setHoverPos(null);
+                  }
+                }}
+                onMouseLeave={() => {
+                  setHoverDistance(null);
+                  setHoverPos(null);
+                }}
               >
                 {/* Coastal Line / River (deterministic curve) */}
                 <path 
@@ -499,6 +532,43 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                 </g>
 
                 {/* Target Pin (Activity Location) */}
+                {/* 1km Radius Indicator Circle around the Target Pin */}
+                <g>
+                  {/* Outer Dashed 1km Circle */}
+                  <circle 
+                    cx={mapData.actX} 
+                    cy={mapData.actY} 
+                    r="60" 
+                    fill="rgba(244,63,94,0.03)" 
+                    stroke="rgba(244,63,94,0.25)" 
+                    strokeWidth="1.2" 
+                    strokeDasharray="3,3" 
+                  />
+                  {/* Text label indicating radius */}
+                  <g transform={`translate(${mapData.actX}, ${mapData.actY + 66})`}>
+                    <rect 
+                      x="-25" 
+                      y="-5" 
+                      width="50" 
+                      height="7" 
+                      rx="1.5" 
+                      fill="rgba(17, 24, 39, 0.85)" 
+                      stroke="rgba(244,63,94,0.15)"
+                      strokeWidth="0.5"
+                    />
+                    <text 
+                      fill="#fda4af" 
+                      fontSize="4.5" 
+                      fontWeight="bold" 
+                      fontFamily="monospace" 
+                      textAnchor="middle" 
+                      y="0"
+                    >
+                      1KM RANGE
+                    </text>
+                  </g>
+                </g>
+
                 <g transform={`translate(${mapData.actX}, ${mapData.actY})`}>
                   {/* Concentric Pulsing Wave */}
                   <circle cx="0" cy="0" r="14" fill="rgba(244,63,94,0.3)" className="animate-pulse-scale" />
@@ -556,6 +626,66 @@ export const ActivityMapModal: React.FC<ActivityMapModalProps> = ({
                     </g>
                   );
                 })}
+
+                {/* Floating distance label when hovering over any part of the 1km circle */}
+                {hoverDistance !== null && hoverPos !== null && (
+                  <g pointerEvents="none">
+                    {/* Radial Dotted Vector Connector */}
+                    <line 
+                      x1={mapData.actX} 
+                      y1={mapData.actY} 
+                      x2={hoverPos.x} 
+                      y2={hoverPos.y} 
+                      stroke="#f43f5e" 
+                      strokeWidth="1" 
+                      strokeDasharray="2,2" 
+                      opacity="0.8"
+                    />
+                    
+                    {/* Intersection crosshair node */}
+                    <circle cx={hoverPos.x} cy={hoverPos.y} r="3" fill="#f43f5e" />
+                    
+                    {/* Bounded Tooltip Box */}
+                    {(() => {
+                      const tooltipX = Math.max(35, Math.min(365, hoverPos.x));
+                      const tooltipY = hoverPos.y < 25 ? hoverPos.y + 22 : hoverPos.y - 12;
+                      return (
+                        <g transform={`translate(${tooltipX}, ${tooltipY})`}>
+                          <rect 
+                            x="-32" 
+                            y="-16" 
+                            width="64" 
+                            height="22" 
+                            rx="6" 
+                            fill="#090d16" 
+                            stroke="#f43f5e" 
+                            strokeWidth="1" 
+                          />
+                          <text 
+                            fill="#fda4af" 
+                            fontSize="6.5" 
+                            fontWeight="bold" 
+                            fontFamily="monospace" 
+                            textAnchor="middle" 
+                            y="-6"
+                          >
+                            RADIUS DIST
+                          </text>
+                          <text 
+                            fill="#ffffff" 
+                            fontSize="8" 
+                            fontWeight="black" 
+                            fontFamily="monospace" 
+                            textAnchor="middle" 
+                            y="2.5"
+                          >
+                            {hoverDistance.toFixed(3)} km
+                          </text>
+                        </g>
+                      );
+                    })()}
+                  </g>
+                )}
               </svg>
 
               {/* Calibration/Telemetry Info */}
