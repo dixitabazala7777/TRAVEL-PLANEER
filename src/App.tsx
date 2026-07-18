@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Compass,
   MapPin,
+  Map,
   CalendarRange,
   Wallet,
   Sparkles,
@@ -52,10 +53,14 @@ import {
   ShieldAlert,
   HeartHandshake,
   Leaf,
-  HelpCircle
+  HelpCircle,
+  Heart
 } from 'lucide-react';
 
 import { Destination, DayPlan, Activity, PackingItem, BudgetTier } from './types';
+import { CurrencyConverter } from './components/CurrencyConverter';
+import { WeatherTrendChart } from './components/WeatherTrendChart';
+import { ActivityMapModal } from './components/ActivityMapModal';
 import {
   DESTINATIONS,
   STYLES,
@@ -164,6 +169,17 @@ export default function App() {
   // For Cultural Etiquette Flip-Cards
   const [flippedCard, setFlippedCard] = useState<Record<string, boolean>>({});
 
+  // For Interactive Activity Maps
+  const [mapActivity, setMapActivity] = useState<Activity | null>(null);
+
+  // For saved favorites
+  const [favorites, setFavorites] = useState<{ activity: Activity; dayNum: number; slotName: 'Morning' | 'Afternoon' | 'Evening' }[]>(() => {
+    try {
+      const stored = localStorage.getItem('waypoint_favorites');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // Synchronize to LocalStorage (Native Browser LocalStorage Cache Engine)
@@ -183,6 +199,7 @@ export default function App() {
     localStorage.setItem('waypoint_bingoState', JSON.stringify(bingoState));
     localStorage.setItem('waypoint_baggageWeights', JSON.stringify(baggageWeights));
     localStorage.setItem('waypoint_travelMonth', travelMonth.toString());
+    localStorage.setItem('waypoint_favorites', JSON.stringify(favorites));
   }, [
     destination,
     days,
@@ -198,7 +215,8 @@ export default function App() {
     customCostBuffer,
     bingoState,
     baggageWeights,
-    travelMonth
+    travelMonth,
+    favorites
   ]);
 
   // --- Dynamic suggestion filtering ---
@@ -744,6 +762,19 @@ export default function App() {
         });
         return { ...dayPlan, slots: updatedSlots };
       });
+    });
+  };
+
+  // --- Toggle activity as favorite ---
+  const handleToggleFavorite = (activity: Activity, dayNum: number, slotName: 'Morning' | 'Afternoon' | 'Evening') => {
+    playChime('click');
+    setFavorites(prev => {
+      const exists = prev.some(item => item.activity.id === activity.id);
+      if (exists) {
+        return prev.filter(item => item.activity.id !== activity.id);
+      } else {
+        return [...prev, { activity, dayNum, slotName }];
+      }
     });
   };
 
@@ -1545,6 +1576,35 @@ export default function App() {
                                             }`}>
                                               {act.title}
                                             </p>
+                                            {!act.done && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  playChime('click');
+                                                  setMapActivity(act);
+                                                }}
+                                                className="inline-flex items-center gap-1 mt-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium transition cursor-pointer outline-none"
+                                              >
+                                                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
+                                                <span>Show on Map</span>
+                                              </button>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleFavorite(act, itinerary[activeDay].day, slot)}
+                                              className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium transition cursor-pointer outline-none text-slate-400 hover:text-rose-400 group"
+                                            >
+                                              <Heart
+                                                className={`w-3.5 h-3.5 transition-all ${
+                                                  favorites.some(f => f.activity.id === act.id)
+                                                    ? 'fill-rose-500 text-rose-500 scale-110'
+                                                    : 'text-slate-500 group-hover:text-rose-400'
+                                                }`}
+                                              />
+                                              <span className={favorites.some(f => f.activity.id === act.id) ? 'text-rose-400' : 'text-slate-400 group-hover:text-rose-400'}>
+                                                {favorites.some(f => f.activity.id === act.id) ? 'Saved' : 'Save'}
+                                              </span>
+                                            </button>
                                             <span className="shrink-0 text-xs font-mono text-slate-400 font-semibold">
                                               {fmtUSD(act.cost)}
                                             </span>
@@ -1577,6 +1637,104 @@ export default function App() {
 
                   {/* Right Column (4/12 width on desktop): Jet Lag Circadian Assistant & Gamified Travel Bingo */}
                   <div className="lg:col-span-4 space-y-6">
+
+                    {/* Saved Favorites Quick Access Panel */}
+                    <div className="glass rounded-2xl p-5 border border-white/5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                        <div className="flex items-center gap-2 text-white">
+                          <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+                          <h4 className="font-display font-semibold text-sm">Saved Favorites</h4>
+                        </div>
+                        {favorites.length > 0 && (
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                            {favorites.length} {favorites.length === 1 ? 'item' : 'items'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        {favorites.length === 0 ? (
+                          <div className="text-center py-6 px-4">
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              No favorited activities yet. Click the <Heart className="w-3 h-3 text-slate-500 inline mx-0.5" /> icon on any activity in your itinerary to save it here for quick access.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1 scrollbar-thin">
+                            {favorites.map(({ activity, dayNum, slotName }) => {
+                              let catColors = 'text-sky-400 border-sky-400/30 bg-sky-400/5';
+                              if (activity.cat === 'Adventure') catColors = 'text-amber-400 border-amber-400/30 bg-amber-400/5';
+                              else if (activity.cat === 'Relaxation') catColors = 'text-blue-400 border-blue-400/30 bg-blue-400/5';
+                              else if (activity.cat === 'Foodie') catColors = 'text-rose-400 border-rose-400/30 bg-rose-400/5';
+                              else if (activity.cat === 'Family') catColors = 'text-violet-400 border-violet-400/30 bg-violet-400/5';
+
+                              return (
+                                <div 
+                                  key={activity.id}
+                                  className="bg-ink-950/40 p-3 rounded-xl border border-white/5 flex flex-col gap-2 hover:border-white/10 transition group"
+                                >
+                                  <div className="flex items-start justify-between gap-2.5">
+                                    <div className="min-w-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          playChime('click');
+                                          // Navigate to the day of this activity!
+                                          const dayIndex = itinerary.findIndex(d => d.day === dayNum);
+                                          if (dayIndex !== -1) {
+                                            setActiveDay(dayIndex);
+                                          }
+                                        }}
+                                        className="text-xs font-semibold text-slate-200 hover:text-blue-400 text-left transition outline-none block line-clamp-2"
+                                        title="Click to jump to this day"
+                                      >
+                                        {activity.title}
+                                      </button>
+                                      <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                                        Day {dayNum} • {slotName}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-mono font-bold text-slate-400 shrink-0">
+                                      {fmtUSD(activity.cost)}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between border-t border-white/5 pt-2 mt-1">
+                                    <span className={`text-[9px] font-mono uppercase tracking-wide border rounded-full px-2 py-0.5 ${catColors}`}>
+                                      {activity.cat}
+                                    </span>
+                                    
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          playChime('click');
+                                          setMapActivity(activity);
+                                        }}
+                                        className="text-[10px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 transition outline-none cursor-pointer"
+                                      >
+                                        <MapPin className="w-2.5 h-2.5" />
+                                        <span>Map</span>
+                                      </button>
+                                      
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleFavorite(activity, dayNum, slotName)}
+                                        className="text-[10px] text-slate-500 hover:text-rose-400 font-medium flex items-center gap-1 transition outline-none cursor-pointer"
+                                        title="Remove from favorites"
+                                      >
+                                        <Heart className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                                        <span>Remove</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     
                     {/* Feature 1: Jet Lag Mitigation & Circadian Assistant */}
                     <div className="glass rounded-2xl p-5 border border-white/5 space-y-4">
@@ -1869,7 +2027,7 @@ export default function App() {
                 </div>
 
                 {/* Dynamic Bento Box Elements: Overage Alerts & Carbon Estimators */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
                   {/* Feature 3: Smart Budget Overage Alert Matrix */}
                   <div className="glass rounded-2xl p-5 border border-white/5 flex flex-col justify-between">
@@ -1905,6 +2063,9 @@ export default function App() {
                       )}
                     </div>
                   </div>
+
+                  {/* Currency Conversion Assistant */}
+                  <CurrencyConverter destinationCurrency={destination.currency} />
 
                   {/* Feature 4: Eco-Footprint & Carbon Offset Estimator */}
                   <div className="glass rounded-2xl p-5 border border-white/5 space-y-4">
@@ -2215,8 +2376,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Grid row 2: Emergency hotline + Passport Validity Tracker */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Weather Trend Chart Section */}
+                <WeatherTrendChart destinationName={destination.name} travelMonth={travelMonth} />
+
+                {/* Grid row 2: Emergency hotline + Passport Validity Tracker + Currency Converter */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                   {/* Emergency hotlines */}
                   <div className="glass rounded-2xl p-5 md:p-6 border border-white/5 space-y-4">
                     <div className="flex items-center gap-2.5 text-white">
@@ -2326,6 +2490,9 @@ export default function App() {
                       })()}
                     </div>
                   </div>
+
+                  {/* Local Currency Quick Converter */}
+                  <CurrencyConverter destinationCurrency={destination.currency} />
                 </div>
 
                 {/* Grid row 3: Interactive Cultural Etiquette Cards (Feature 8) */}
@@ -2401,6 +2568,14 @@ export default function App() {
           </span>
         </div>
       </footer>
+
+      {/* Interactive Activity Map Modal */}
+      <ActivityMapModal
+        isOpen={mapActivity !== null}
+        onClose={() => setMapActivity(null)}
+        activity={mapActivity}
+        destinationName={destination?.name || ''}
+      />
     </div>
   );
 }
