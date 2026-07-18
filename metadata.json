@@ -1,0 +1,6 @@
+{
+  "name": "Waypoint",
+  "description": "An offline-first AI travel planner that creates day-by-day itineraries, live budgets, and smart packing lists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
