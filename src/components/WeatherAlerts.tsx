@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ShieldAlert, Info, ExternalLink, RefreshCw, ThermometerSnowflake, Waves, Flame, Wind, Sun } from 'lucide-react';
-import { WeatherAlertResponse } from '../types';
+import { motion } from 'motion/react';
+import { AlertTriangle, ShieldAlert, Info, ExternalLink, RefreshCw, ThermometerSnowflake, Waves, Flame, Wind, Sun, MapPin, ChevronDown, ChevronUp, Landmark } from 'lucide-react';
+import { WeatherAlertResponse, SafeZone } from '../types';
 import { playChime } from '../utils';
 
 interface WeatherAlertsProps {
@@ -11,11 +12,18 @@ interface WeatherAlertsProps {
 export const WeatherAlerts: React.FC<WeatherAlertsProps> = ({ destinationName, travelMonth }) => {
   const [data, setData] = useState<WeatherAlertResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string, isQuota?: boolean } | null>(null);
+  const [cooldown, setCooldown] = useState<number>(0);
+  
+  // Safe Zones state
+  const [safeZonesMap, setSafeZonesMap] = useState<Record<number, { zones: SafeZone[], loading: boolean }>>({});
+  const [expandedAlertIdx, setExpandedAlertIdx] = useState<number | null>(null);
 
   const fetchAlerts = async () => {
     setLoading(true);
     setError(null);
+    setSafeZonesMap({});
+    setExpandedAlertIdx(null);
     try {
       const response = await fetch('/api/weather-alerts', {
         method: 'POST',
@@ -23,16 +31,60 @@ export const WeatherAlerts: React.FC<WeatherAlertsProps> = ({ destinationName, t
         body: JSON.stringify({ destination: destinationName, month: travelMonth }),
       });
 
-      if (!response.ok) throw new Error('Failed to fetch weather alerts');
+      if (!response.ok) {
+        if (response.status === 429) {
+          const errData = await response.json();
+          setError({ message: errData.message || 'Quota exceeded', isQuota: true });
+          setCooldown(30); // 30 second cooldown
+          return;
+        }
+        throw new Error('Failed to fetch weather alerts');
+      }
       const result = await response.json();
       setData(result);
     } catch (err: any) {
       console.error('Weather alerts error:', err);
-      setError(err.message);
+      setError({ message: err.message });
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchSafeZones = async (idx: number, weatherType: string) => {
+    if (safeZonesMap[idx]) {
+      setExpandedAlertIdx(expandedAlertIdx === idx ? null : idx);
+      return;
+    }
+
+    setSafeZonesMap(prev => ({ ...prev, [idx]: { zones: [], loading: true } }));
+    setExpandedAlertIdx(idx);
+    playChime('click');
+
+    try {
+      const response = await fetch('/api/safe-zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: destinationName, weatherType }),
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch safe zones');
+      const result = await response.json();
+      setSafeZonesMap(prev => ({ ...prev, [idx]: { zones: result.safeZones || [], loading: false } }));
+    } catch (err) {
+      console.error('Safe zones error:', err);
+      setSafeZonesMap(prev => ({ ...prev, [idx]: { zones: [], loading: false } }));
+    }
+  };
+
+  useEffect(() => {
+    let timer: any;
+    if (cooldown > 0) {
+      timer = setInterval(() => {
+        setCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   useEffect(() => {
     fetchAlerts();
@@ -77,14 +129,29 @@ export const WeatherAlerts: React.FC<WeatherAlertsProps> = ({ destinationName, t
 
   if (error) {
     return (
-      <div className="glass rounded-2xl p-6 border border-rose-500/20 bg-rose-500/5 text-center">
-        <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-        <p className="text-sm text-rose-200 mb-4">Historical analysis failed</p>
+      <div className={`glass rounded-2xl p-6 border text-center transition-all ${
+        error.isQuota ? 'border-amber-500/20 bg-amber-500/5' : 'border-rose-500/20 bg-rose-500/5'
+      }`}>
+        <ShieldAlert className={`w-10 h-10 mx-auto mb-3 ${error.isQuota ? 'text-amber-500' : 'text-rose-500'}`} />
+        <p className={`text-sm mb-1 font-bold ${error.isQuota ? 'text-amber-200' : 'text-rose-200'}`}>
+          {error.isQuota ? 'Quota Limit Reached' : 'Analysis Failed'}
+        </p>
+        <p className="text-[11px] text-slate-400 mb-4 max-w-[200px] mx-auto leading-relaxed">
+          {error.message}
+        </p>
         <button 
           onClick={() => { playChime('click'); fetchAlerts(); }}
-          className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 rounded-xl text-xs font-bold text-rose-100 flex items-center gap-2 mx-auto transition-all"
+          disabled={cooldown > 0}
+          className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-2 mx-auto transition-all ${
+            cooldown > 0 
+              ? 'opacity-50 cursor-not-allowed bg-white/5 border-white/10 text-slate-500' 
+              : error.isQuota 
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-100'
+                : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-100'
+          }`}
         >
-          <RefreshCw className="w-3 h-3" /> Retry Analysis
+          <RefreshCw className={`w-3 h-3 ${cooldown > 0 ? '' : 'animate-spin-slow'}`} /> 
+          {cooldown > 0 ? `Wait ${cooldown}s` : 'Retry Analysis'}
         </button>
       </div>
     );
@@ -131,28 +198,104 @@ export const WeatherAlerts: React.FC<WeatherAlertsProps> = ({ destinationName, t
       {hasAlerts ? (
         <div className="space-y-3">
           {data.alerts.map((alert, idx) => (
-            <div key={idx} className={`p-4 rounded-xl border flex gap-4 transition-all hover:scale-[1.01] ${getSeverityColor(alert.severity)}`}>
-              <div className="shrink-0 mt-1">
-                {getAlertIcon(alert.type)}
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h5 className="text-xs font-bold uppercase tracking-wide">{alert.type}</h5>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-current bg-opacity-10 font-bold border border-current border-opacity-20">
-                    {alert.severity} Risk
-                  </span>
+            <motion.div 
+              key={idx} 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ 
+                opacity: 1, 
+                y: 0,
+                scale: alert.severity === 'Critical' || alert.severity === 'High' ? [1, 1.01, 1] : 1
+              }}
+              transition={{
+                scale: {
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                },
+                opacity: { duration: 0.3, delay: idx * 0.1 }
+              }}
+              className={`p-4 rounded-xl border flex flex-col gap-3 transition-all ${getSeverityColor(alert.severity)}`}
+            >
+              <div className="flex gap-4">
+                <div className="shrink-0 mt-1">
+                  {getAlertIcon(alert.type)}
                 </div>
-                <p className="text-[11px] opacity-80 leading-relaxed">
-                  {alert.description}
-                </p>
-                <div className="pt-1 flex items-start gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-0.5">Advice:</span>
-                  <p className="text-[10px] font-medium leading-relaxed italic">
-                    {alert.advice}
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-xs font-bold uppercase tracking-wide">{alert.type}</h5>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-current bg-opacity-10 font-bold border border-current border-opacity-20">
+                        {alert.severity} Risk
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] opacity-80 leading-relaxed">
+                    {alert.description}
                   </p>
+                  <div className="pt-1 flex items-start gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-0.5">Advice:</span>
+                    <p className="text-[10px] font-medium leading-relaxed italic">
+                      {alert.advice}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Safe Zones Button */}
+              <div className="pt-2 border-t border-current border-opacity-10">
+                <button
+                  onClick={() => fetchSafeZones(idx, alert.type)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-current bg-opacity-5 hover:bg-opacity-10 transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  <span className="flex items-center gap-2">
+                    <Landmark className="w-3.5 h-3.5" />
+                    Locate Indoor Safe Zones
+                  </span>
+                  {safeZonesMap[idx]?.loading ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : expandedAlertIdx === idx ? (
+                    <ChevronUp className="w-3 h-3" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" />
+                  )}
+                </button>
+
+                {expandedAlertIdx === idx && (
+                  <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    {safeZonesMap[idx]?.loading ? (
+                      <div className="py-4 flex flex-col items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[9px] font-mono opacity-60">Scanning for public hubs...</span>
+                      </div>
+                    ) : safeZonesMap[idx]?.zones.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-2">
+                        {safeZonesMap[idx].zones.map((zone, zIdx) => (
+                          <div key={zIdx} className="bg-white/5 rounded-lg p-2.5 border border-white/5 flex gap-3">
+                            <div className="shrink-0 w-7 h-7 rounded-md bg-white/5 flex items-center justify-center">
+                              <MapPin className="w-3.5 h-3.5 opacity-60" />
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-white">{zone.name}</span>
+                                <span className="text-[8px] px-1 rounded bg-white/5 opacity-60 uppercase">{zone.type}</span>
+                              </div>
+                              <p className="text-[9px] opacity-60 flex items-center gap-1">
+                                <Info className="w-2.5 h-2.5" /> {zone.location}
+                              </p>
+                              <p className="text-[9px] opacity-80 leading-snug italic">
+                                "{zone.why}"
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] py-2 opacity-60 text-center italic">No specific safe zones found nearby.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
           ))}
         </div>
       ) : (

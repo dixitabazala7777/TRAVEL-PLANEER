@@ -21,12 +21,42 @@ const ai = new GoogleGenAI({
 
 app.use(express.json());
 
+// Generic quota error handler
+const handleQuotaError = (error: any, res: express.Response) => {
+  const errorStr = JSON.stringify(error);
+  if (
+    error.status === 429 || 
+    error.message?.includes("429") || 
+    error.message?.includes("RESOURCE_EXHAUSTED") ||
+    errorStr.includes("429") ||
+    errorStr.includes("RESOURCE_EXHAUSTED")
+  ) {
+    return res.status(429).json({ 
+      error: "Quota exceeded", 
+      message: "The AI search tool is currently at its limit. Please try again in a few minutes.",
+      code: "RESOURCE_EXHAUSTED"
+    });
+  }
+  return res.status(500).json({ error: error.message || "Internal Server Error" });
+};
+
+// Unified cache for various API results
+const apiCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+
 // API route for Flight Tracking with search grounding
 app.post("/api/track-flight", async (req, res) => {
   try {
     const { flightNumber, date } = req.body;
     if (!flightNumber) {
       return res.status(400).json({ error: "Missing flight number" });
+    }
+
+    const cacheKey = `flight-${flightNumber}-${date || "today"}`.toLowerCase();
+    const cached = apiCache.get(cacheKey);
+    // Flights change frequently, so lower TTL for flights (15 mins)
+    if (cached && (Date.now() - cached.timestamp < 1000 * 60 * 15)) {
+      return res.json(cached.data);
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -55,14 +85,14 @@ Only return the raw JSON.`;
     });
 
     const responseText = result.text;
-    // Simple JSON extraction in case of markdown formatting
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
 
+    apiCache.set(cacheKey, { data, timestamp: Date.now() });
     res.json(data);
   } catch (error: any) {
     console.error("Flight tracking error:", error);
-    res.status(500).json({ error: error.message });
+    return handleQuotaError(error, res);
   }
 });
 
@@ -73,6 +103,12 @@ app.post("/api/places-suggestions", async (req, res) => {
 
     if (!destination) {
       return res.status(400).json({ error: "Missing required field: destination" });
+    }
+
+    const cacheKey = `places-${destination}-${budgetTier}-${travelStyles?.join(",")}-${month}`.toLowerCase();
+    const cached = apiCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -116,10 +152,11 @@ Only return raw JSON.`;
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
 
+    apiCache.set(cacheKey, { data, timestamp: Date.now() });
     res.json(data);
   } catch (error: any) {
     console.error("Places suggestions error:", error);
-    res.status(500).json({ error: error.message });
+    return handleQuotaError(error, res);
   }
 });
 
@@ -130,6 +167,12 @@ app.post("/api/weather-alerts", async (req, res) => {
 
     if (!destination || month === undefined) {
       return res.status(400).json({ error: "Missing destination or month" });
+    }
+
+    const cacheKey = `weather-${destination}-${month}`.toLowerCase();
+    const cached = apiCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -168,12 +211,64 @@ Only return raw JSON. If no major historical risks exist for this month, return 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
 
+    apiCache.set(cacheKey, { data, timestamp: Date.now() });
     res.json(data);
   } catch (error: any) {
     console.error("Weather alerts error:", error);
-    res.status(500).json({ error: error.message });
+    return handleQuotaError(error, res);
   }
 });
+
+// API Route for locating safe zones / indoor refuges based on weather type
+app.post("/api/safe-zones", async (req, res) => {
+  try {
+    const { destination, weatherType } = req.body;
+
+    if (!destination || !weatherType) {
+      return res.status(400).json({ error: "Missing destination or weather type" });
+    }
+
+    const cacheKey = `safezones-${destination}-${weatherType}`.toLowerCase();
+    const cached = apiCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
+    }
+
+    const prompt = `Find 3-4 specific indoor public spaces, climate-controlled hubs, or safe zones in ${destination} that would serve as a refuge during ${weatherType} events (e.g., cooling centers for heatwaves, libraries/malls for storms, community centers).
+Focus on publicly accessible locations with their approximate area/neighborhood.
+Return the result as a JSON object:
+{
+  "safeZones": [
+    {
+      "name": "Name of the place",
+      "type": "Library | Mall | Community Center | Public Building",
+      "location": "Neighborhood or Address",
+      "why": "Briefly why it is a good refuge for ${weatherType}"
+    }
+  ]
+}
+Only return raw JSON.`;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} } as any],
+      }
+    });
+
+    const responseText = result.text;
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const data = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+
+    apiCache.set(cacheKey, { data, timestamp: Date.now() });
+    res.json(data);
+  } catch (error: any) {
+    console.error("Safe zones error:", error);
+    return handleQuotaError(error, res);
+  }
+});
+
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

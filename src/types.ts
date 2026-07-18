@@ -80,3 +80,10 @@ export interface WeatherAlertResponse {
   alerts: WeatherAlert[];
   summary: string;
 }
+
+export interface SafeZone {
+  name: string;
+  type: string;
+  location: string;
+  why: string;
+}
