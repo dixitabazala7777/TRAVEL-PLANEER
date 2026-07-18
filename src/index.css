@@ -84,3 +84,69 @@ body {
   animation: spin 50s linear infinite;
 }
 
+/* Print Stylesheet System */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: var(--font-sans) !important;
+  }
+  
+  /* Hide non-printable elements */
+  nav,
+  header,
+  form,
+  button,
+  .no-print,
+  #input-card,
+  #btnCopySummary,
+  #btnDownloadTxt,
+  #btnDownloadJson,
+  #btnPrintDossier {
+    display: none !important;
+  }
+
+  /* Show results section as full printable paper */
+  #results-section {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Force light background, black borders, black text */
+  .glass, 
+  .bg-ink-900, 
+  .bg-ink-850, 
+  .bg-ink-800 {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Text colors */
+  h1, h2, h3, h4, span, p, div, li {
+    color: #000000 !important;
+  }
+
+  .text-slate-400, .text-slate-300, .text-slate-500, .text-blue-400, .text-emerald-400 {
+    color: #333333 !important;
+  }
+
+  /* Expand hidden areas or simplify for paper */
+  .grid {
+    display: block !important;
+  }
+  
+  .flex {
+    display: flex !important;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+}
+

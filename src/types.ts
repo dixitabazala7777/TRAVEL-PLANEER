@@ -10,6 +10,28 @@ export interface Destination {
   img: string;
   costIndex: number;
   styles: string[];
+  timezoneOffset: number; // UTC offset in hours
+  emergency: {
+    police: string;
+    ambulance: string;
+    fire: string;
+    embassyNote: string;
+  };
+  etiquette: {
+    rule: string;
+    detail: string;
+  }[];
+  phrases: {
+    native: string;
+    phonetic: string;
+    meaning: string;
+  }[];
+  disruptionRiskByMonth: number[]; // 12 values for Jan to Dec (0 to 100)
+  bingo: string[]; // 9 items for 3x3 bingo grid
+  archetypeWeights: Record<string, number>; // Weights for travel styles (e.g., culture: 95, adventure: 20)
+  culturalEtiquette: string;
+  localScamToAvoid: string;
+  emergencyHotline: string;
 }
 
 export interface Activity {
