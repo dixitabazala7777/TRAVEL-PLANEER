@@ -1,3 +1,6 @@
+import { Activity, DayPlan, Destination, PackingItem } from './types';
+import { ACTIVITY_POOL, PACKING_BASE, PACKING_CLIMATE, PACKING_STYLE } from './data';
+
 export function seededRandom(seed: number) {
   let s = seed % 2147483647;
   if (s <= 0) s += 2147483646;
@@ -13,6 +16,56 @@ export function hashStr(str: string): number {
     h = (h * 31 + str.charCodeAt(i)) | 0;
   }
   return Math.abs(h);
+}
+
+export function generateItinerary(
+  destination: Destination,
+  days: number,
+  selectedStyles: string[],
+  seedSuffix = ''
+): DayPlan[] {
+  const styles = selectedStyles.length > 0 ? selectedStyles : ['culture'];
+  const rand = seededRandom(hashStr(destination.id + styles.slice().sort().join(',') + days + seedSuffix));
+  const slots = ['Morning', 'Afternoon', 'Evening'] as const;
+
+  return Array.from({ length: days }, (_, dayIndex) => {
+    const day = dayIndex + 1;
+    const daySlots: DayPlan['slots'] = { Morning: [], Afternoon: [], Evening: [] };
+
+    slots.forEach((slot, slotIndex) => {
+      const style = styles[(day + slotIndex) % styles.length];
+      const pool = ACTIVITY_POOL[style]?.filter(activity => activity.slot === slot) || [];
+      const template = pool[Math.floor(rand() * pool.length)] || ACTIVITY_POOL[style]?.[0];
+      if (!template) return;
+
+      const activity: Activity = {
+        id: `${day}-${slot}-${template.cat}-${Math.floor(rand() * 100000)}`,
+        title: template.t.replace('{name}', destination.name),
+        slot,
+        cat: template.cat,
+        style,
+        cost: Math.round(template.cost * destination.costIndex),
+        done: false
+      };
+      daySlots[slot].push(activity);
+    });
+
+    return { day, slots: daySlots };
+  });
+}
+
+export function buildPackingList(destination: Destination, selectedStyles: string[]): PackingItem[] {
+  const styleItems = selectedStyles.flatMap(style => PACKING_STYLE[style] || []);
+  return Array.from(new Set([
+    ...PACKING_BASE,
+    ...(PACKING_CLIMATE[destination.climate] || []),
+    ...styleItems
+  ])).map((label, index) => ({
+    id: `pack-${index}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    label,
+    checked: false,
+    custom: false
+  }));
 }
 
 export function fmtUSD(n: number): string {

@@ -71,12 +71,9 @@ import { WeatherAlerts } from './components/WeatherAlerts';
 import {
   DESTINATIONS,
   STYLES,
-  ACTIVITY_POOL,
-  PACKING_BASE,
-  PACKING_CLIMATE,
-  PACKING_STYLE
+  ACTIVITY_POOL
 } from './data';
-import { seededRandom, hashStr, fmtUSD, playChime } from './utils';
+import { fmtUSD, playChime, generateItinerary, buildPackingList } from './utils';
 import { generateDossierData, generateDossierTextString, getChaosBuffer } from './dossierGenerator';
 
 const TIER_BASE = { budget: 55, moderate: 130, luxury: 320 };
@@ -675,42 +672,12 @@ export default function App() {
 
     const dest = destination;
     const selectedStyleList: string[] = Array.from(selectedStyles);
-    const seed = hashStr(dest.id + selectedStyleList.sort().join(',') + days);
-    const rand = seededRandom(seed);
-
-    const newItinerary: DayPlan[] = [];
-
-    for (let day = 1; day <= days; day++) {
-      const slots: DayPlan['slots'] = { Morning: [], Afternoon: [], Evening: [] };
-      (['Morning', 'Afternoon', 'Evening'] as const).forEach(slot => {
-        const slotIdx = ['Morning', 'Afternoon', 'Evening'].indexOf(slot);
-        // rotate through styles so variety spreads across the trip
-        const style = selectedStyleList[(day + slotIdx) % selectedStyleList.length] || selectedStyleList[0];
-        const pool = ACTIVITY_POOL[style]?.filter(a => a.slot === slot) || [];
-        const pick = pool[Math.floor(rand() * pool.length)] || ACTIVITY_POOL[style]?.[0];
-        if (pick) {
-          slots[slot].push(makeActivity(pick, style, dest, day, slot));
-        }
-      });
-      newItinerary.push({ day, slots });
-    }
+    const newItinerary = generateItinerary(dest, days, selectedStyleList);
 
     setItinerary(newItinerary);
 
     // Build packing checklist
-    const climateItems = PACKING_CLIMATE[dest.climate] || [];
-    const baseItems = [...PACKING_BASE, ...climateItems];
-    const styleItemsSet = new Set<string>();
-    selectedStyleList.forEach(s => {
-      (PACKING_STYLE[s] || []).forEach(item => styleItemsSet.add(item));
-    });
-
-    const combinedPacking = Array.from(new Set([...baseItems, ...Array.from(styleItemsSet)])).map(label => ({
-      id: `pack-${Math.random().toString(36).substring(2, 9)}`,
-      label,
-      checked: false,
-      custom: false
-    }));
+    const combinedPacking = buildPackingList(dest, selectedStyleList);
 
     setPacking(combinedPacking);
     setActiveTab('itinerary');
@@ -759,23 +726,7 @@ export default function App() {
         if (newDays > cur) {
           const d = destination;
           const selectedStyleList: string[] = Array.from(selectedStyles);
-          const seed = hashStr(d.id + selectedStyleList.sort().join(',') + newDays + '-ext');
-          const rand = seededRandom(seed);
-          const addedPlans: DayPlan[] = [];
-
-          for (let day = cur + 1; day <= newDays; day++) {
-            const slots: DayPlan['slots'] = { Morning: [], Afternoon: [], Evening: [] };
-            (['Morning', 'Afternoon', 'Evening'] as const).forEach(slot => {
-              const slotIdx = ['Morning', 'Afternoon', 'Evening'].indexOf(slot);
-              const style = selectedStyleList[(day + slotIdx) % selectedStyleList.length] || selectedStyleList[0];
-              const pool = ACTIVITY_POOL[style]?.filter(a => a.slot === slot) || [];
-              const pick = pool[Math.floor(rand() * pool.length)] || ACTIVITY_POOL[style]?.[0];
-              if (pick) {
-                slots[slot].push(makeActivity(pick, style, d, day, slot));
-              }
-            });
-            addedPlans.push({ day, slots });
-          }
+          const addedPlans = generateItinerary(d, newDays, selectedStyleList, '-ext').slice(cur);
 
           // Stagger the addition of new days via simulation
           setIsStreaming(true);
